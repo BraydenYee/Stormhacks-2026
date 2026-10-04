@@ -14,7 +14,3 @@ def transferMessage(nativeMessage, translatedMessage):
     sock.sendall(arduino_payload.encode("utf-8"))
 
     sock.close()
-
-    
-
-transferMessage("Hola", "Hello")
