@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git switch *)",
+      "Bash(git checkout *)",
+      "Bash(.venv/bin/python -)"
+    ]
+  }
+}
