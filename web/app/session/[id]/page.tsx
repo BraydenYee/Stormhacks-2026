@@ -196,6 +196,8 @@ function SummaryView({ summary: s }: { summary: Summary }) {
         {s.coach_note && <p className="mt-2 opacity-80">{s.coach_note}</p>}
       </div>
 
+      <ProficiencyChange start={s.cefr_start} end={s.cefr_end} change={s.proficiency_change} />
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat label="Turns" value={s.turns} />
         <Stat label="Words spoken" value={s.words_spoken} />
@@ -214,6 +216,20 @@ function SummaryView({ summary: s }: { summary: Summary }) {
               </span>
             ))}
           </div>
+        </section>
+      )}
+
+      {s.off_topic_replies.length > 0 && (
+        <section>
+          <h2 className="mb-2 font-medium">Replies that missed the question · {s.off_topic_count}</h2>
+          <ul className="space-y-2">
+            {s.off_topic_replies.map((r, i) => (
+              <li key={i} className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                <span className="font-medium">&ldquo;{r.text}&rdquo;</span>
+                {r.reason && <p className="text-sm opacity-70">{r.reason}</p>}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -240,6 +256,22 @@ function SummaryView({ summary: s }: { summary: Summary }) {
         </Link>
       </div>
     </div>
+  );
+}
+
+function ProficiencyChange({ start, end, change }: { start: string; end: string; change: number }) {
+  const steady = Math.abs(change) < 0.05;
+  const up = change > 0;
+  const tone = steady ? "border-black/10 dark:border-white/15" : up ? "border-green-500/40 bg-green-500/10" : "border-red-500/40 bg-red-500/10";
+  const label = steady ? "No change" : `${up ? "▲ Up" : "▼ Down"} ${Math.abs(change).toFixed(1)} ${Math.abs(change) === 1 ? "level" : "levels"}`;
+  return (
+    <section className={`rounded-xl border p-4 ${tone}`}>
+      <p className="text-xs opacity-60">Proficiency this session</p>
+      <p className="text-xl font-semibold">{label}</p>
+      <p className="text-sm opacity-70">
+        {start} → {end}
+      </p>
+    </section>
   );
 }
 

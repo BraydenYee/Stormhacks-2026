@@ -14,7 +14,7 @@ from api import db as dbmod
 from api.config import settings
 from api.db import get_db
 from api.ml import difficulty as diff
-from api.ml.features import CEFR_TO_NUM, compute_features, cosine
+from api.ml.features import CEFR_TO_NUM, add_off_topic_mistake, compute_features, confidence_stats, cosine
 from api.models import ConversationSession, LearnerProfile, Mistake, Turn, User, Vocab
 from api.recs import vocab_to_review
 from api.services import llm
@@ -224,6 +224,7 @@ async def post_turn(
 
     # 3. Gemini: reply + analysis of what the learner said
     k = diff.knobs(profile.difficulty)
+    spans = confidence_stats(stt_words, text)["unclear_spans"]
     turn = await llm.tutor_turn(
         session.target_lang,
         user.native_lang,
@@ -231,14 +232,15 @@ async def post_turn(
         [{"role": t.role, "text": t.text} for t in history],
         text,
         past,
+        [text[a:b] for a, b in spans],
     )
-    analysis = turn.learner_analysis.model_dump()
+    analysis = add_off_topic_mistake(turn.learner_analysis.model_dump(), text)
 
     # 4. Score the turn and adjust difficulty
     features = compute_features(text, analysis, stt_words, sim)
     perf = diff.performance(features)
     old_d = profile.difficulty
-    new_d, smoothed = diff.update(old_d, perf["p"], (profile.stats or {}).get("smoothed_p"))
+    new_d, smoothed = diff.update(old_d, perf["p"], (profile.stats or {}).get("smoothed_p"), features.get("estimated_cefr"))
     profile.difficulty = new_d
     profile.stats = {**(profile.stats or {}), "smoothed_p": smoothed}
 
@@ -314,6 +316,7 @@ async def _build_summary(db: AsyncSession, session: ConversationSession, user: U
         await db.scalars(select(Mistake).join(Turn, Turn.id == Mistake.turn_id).where(Turn.session_id == session.id))
     ).all()
     categories = Counter(m.category for m in mistakes)
+    off_topic = [t for t in user_turns if t.features and t.features.get("on_topic") is False]
     ps = [t.features["performance"]["p"] for t in user_turns if t.features and "performance" in t.features]
     cl = [t.features["clarity"] for t in user_turns if t.features and t.features.get("clarity") is not None]
     stats = {
@@ -325,16 +328,20 @@ async def _build_summary(db: AsyncSession, session: ConversationSession, user: U
         "difficulty_start": session.start_difficulty,
         "difficulty_end": profile.difficulty,
         "errors_by_category": dict(categories),
+        "off_topic_count": len(off_topic),
         "example_mistakes": [{"original": m.original, "corrected": m.corrected} for m in mistakes[:5]],
     }
     summary = {
         **stats,
+        "cefr_start": diff.cefr_label(session.start_difficulty),
         "cefr_end": diff.cefr_label(profile.difficulty),
+        "proficiency_change": round(profile.difficulty - session.start_difficulty, 2),
         "difficulty_trajectory": [round(t.difficulty_at_turn, 2) for t in user_turns] + [profile.difficulty],
         "mistakes": [
             {"original": m.original, "corrected": m.corrected, "explanation": m.explanation, "category": m.category}
             for m in mistakes
         ],
+        "off_topic_replies": [{"text": t.text, "reason": t.features.get("off_topic_reason")} for t in off_topic],
         "vocab_to_review": await vocab_to_review(db, user.id, session.target_lang),
     }
     try:
@@ -391,6 +398,7 @@ async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db))
                 "translation": t.translation,
                 "corrections": corrections.get(t.id, []),
                 "unclear_spans": (t.features or {}).get("unclear_spans", []),
+                "off_topic_reason": (t.features or {}).get("off_topic_reason"),
             }
             for t in turns
         ],

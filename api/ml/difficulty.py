@@ -2,16 +2,17 @@
 
 Difficulty `d` is a continuous score in [1, 6] mapped onto CEFR A1–C2. After each learner
 turn we score their performance `p` in [0, 1] and nudge `d` toward keeping them in the
-"stretched but succeeding" zone (target p ≈ 0.75). Gains are asymmetric: we back off
+"stretched but succeeding" zone (target p ≈ 0.65). Gains are asymmetric: we back off
 faster when someone struggles than we ramp up when they're comfortable.
 """
 
-from api.ml.features import CEFR_LEVELS
+from api.ml.features import CEFR_LEVELS, CEFR_TO_NUM
 
 D_MIN, D_MAX = 1.0, 6.0
-TARGET_P = 0.75
+TARGET_P = 0.65
 GAIN_UP = 0.8
-GAIN_DOWN = 0.5
+GAIN_DOWN = 2.0
+PULL_TO_ESTIMATE = 0.3  # share of the gap to Gemini's estimated level closed per turn, when that level is lower
 EMA_ALPHA = 0.6  # weight of the newest turn in the smoothed performance
 
 
@@ -53,16 +54,16 @@ def clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
 
 def performance(f: dict) -> dict:
     """Score one learner turn. Returns the components too, for display/debugging."""
-    accuracy = 1.0 - clamp(f.get("weighted_errors_per_10", 0.0) / 3.0)
+    accuracy = 1.0 - clamp(f.get("weighted_errors_per_10", 0.0) / 1.5)
 
-    length = clamp(f.get("word_count", 0) / 8.0)
+    length = clamp(f.get("word_count", 0) / 12.0)
     rate = f.get("speaking_rate")
     fluency = length if rate is None else 0.5 * length + 0.5 * clamp(rate / 2.0)
     fluency = clamp(fluency - 0.1 * f.get("long_pauses", 0))
 
     sim = f.get("comprehension_sim")
     if not f.get("on_topic", True):
-        comprehension = 0.2
+        comprehension = 0.0
     elif sim is None:
         comprehension = 1.0
     else:
@@ -74,12 +75,12 @@ def performance(f: dict) -> dict:
     # Pronunciation clarity (speech-recognizer confidence) only exists for spoken turns. Average word
     # confidence runs from ~0.5 (struggling to be understood) to ~0.9 (clear); typed turns skip it.
     clarity = f.get("clarity")
-    pronunciation = None if clarity is None else clamp((clarity - 0.5) / 0.4)
+    pronunciation = None if clarity is None else clamp((clarity - 0.6) / 0.35)
 
     parts = {
-        "accuracy": (0.35, accuracy),
-        "fluency": (0.20, fluency),
-        "comprehension": (0.20, comprehension),
+        "accuracy": (0.45, accuracy),
+        "fluency": (0.15, fluency),
+        "comprehension": (0.15, comprehension),
         "target_lang_use": (0.10, target_lang_use),
     }
     if pronunciation is not None:
@@ -96,12 +97,21 @@ def performance(f: dict) -> dict:
     }
 
 
-def update(d: float, p: float, prev_smoothed: float | None = None) -> tuple[float, float]:
-    """Return (new_difficulty, smoothed_performance)."""
+def update(d: float, p: float, prev_smoothed: float | None = None, estimated_cefr: str | None = None) -> tuple[float, float]:
+    """Return (new_difficulty, smoothed_performance).
+
+    Falling short of the target drops difficulty much faster than beating it raises it. If Gemini judged the
+    learner's level this turn to be below the current difficulty, difficulty is also pulled toward that level,
+    so a learner who isn't showing the proficiency we assumed comes down even when their score is middling.
+    """
     smoothed = p if prev_smoothed is None else EMA_ALPHA * p + (1 - EMA_ALPHA) * prev_smoothed
     err = smoothed - TARGET_P
     gain = GAIN_UP if err > 0 else GAIN_DOWN
-    return round(clamp(d + gain * err, D_MIN, D_MAX), 3), round(smoothed, 3)
+    new_d = d + gain * err
+    estimate = CEFR_TO_NUM.get(estimated_cefr or "")
+    if estimate is not None and estimate < new_d:
+        new_d -= PULL_TO_ESTIMATE * (new_d - estimate)
+    return round(clamp(new_d, D_MIN, D_MAX), 3), round(smoothed, 3)
 
 
 def cefr_label(d: float) -> str:

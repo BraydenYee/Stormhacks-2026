@@ -56,10 +56,14 @@ export type Summary = {
   avg_clarity: number | null;
   difficulty_start: number;
   difficulty_end: number;
+  cefr_start: string;
   cefr_end: string;
+  proficiency_change: number; // end minus start difficulty, in CEFR levels (A1=1 … C2=6)
   difficulty_trajectory: number[];
   errors_by_category: Record<string, number>;
   mistakes: Correction[];
+  off_topic_count: number;
+  off_topic_replies: { text: string; reason: string | null }[];
   vocab_to_review: (Vocab & { times_misused: number })[];
   coach_note: string | null;
 };

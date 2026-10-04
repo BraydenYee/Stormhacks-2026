@@ -19,6 +19,7 @@ ERROR_WEIGHTS = {
     "register": 0.3,
     "spelling": 0.2,
     "other": 0.5,
+    "off_topic": 1.0,
 }
 
 LONG_PAUSE_S = 1.0
@@ -90,6 +91,20 @@ def confidence_stats(words: list[dict] | None, text: str) -> dict:
     }
 
 
+def add_off_topic_mistake(analysis: dict, text: str) -> dict:
+    """Count a reply that missed the question as a mistake, so it shows up in scoring and analytics."""
+    if analysis.get("on_topic", True):
+        return analysis
+    asked = analysis.get("previous_tutor_question")
+    correction = {
+        "original": text,
+        "corrected": f"Answer the question: {asked}" if asked else "Answer the tutor's question",
+        "explanation": analysis.get("off_topic_reason") or "The reply did not answer the question.",
+        "category": "off_topic",
+    }
+    return {**analysis, "corrections": [*(analysis.get("corrections") or []), correction]}
+
+
 def compute_features(
     text: str,
     analysis: dict,
@@ -111,6 +126,7 @@ def compute_features(
         "mean_vocab_cefr": round(float(np.mean(vocab_levels)), 2) if vocab_levels else None,
         "used_native_language": bool(analysis.get("used_native_language")),
         "on_topic": bool(analysis.get("on_topic", True)),
+        "off_topic_reason": analysis.get("off_topic_reason") if not analysis.get("on_topic", True) else None,
         "estimated_cefr": analysis.get("estimated_cefr"),
         "comprehension_sim": round(comprehension_sim, 3) if comprehension_sim is not None else None,
         **timing_stats(stt_words),

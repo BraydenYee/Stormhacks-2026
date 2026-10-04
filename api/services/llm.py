@@ -70,10 +70,20 @@ class NewVocab(VocabItem):
 
 
 class LearnerAnalysis(BaseModel):
-    corrections: list[Correction]
-    on_topic: bool = Field(
-        description="Did the learner respond meaningfully to what the tutor said? Always true for their first message."
+    # Filled first on purpose: stating what was asked makes the on_topic judgment below more reliable.
+    previous_tutor_question: str | None = Field(
+        description="What the tutor's previous message asked or invited, including the specific subject it was about, "
+        "not just the question word. Null for the learner's first message."
     )
+    on_topic: bool = Field(
+        description="False if the learner's message does not actually answer or follow from the tutor's previous message: "
+        "an unrelated reply, or one that does not fit what was asked. Always true for their first message."
+    )
+    off_topic_reason: str | None = Field(
+        description="Only when on_topic is false: one short sentence, in the learner's native language, saying "
+        "what was asked and how the reply did not fit. Otherwise null.",
+    )
+    corrections: list[Correction]
     used_native_language: bool = Field(description="Did the learner fall back to their native language for a substantial part?")
     vocab_used: list[VocabItem] = Field(description="Content words the learner used correctly (max 8)")
     estimated_cefr: str = Field(description="Your estimate of the learner's level from this turn: A1–C2")
@@ -112,9 +122,20 @@ def system_prompt(target: str, native: str, k: dict, past_mistakes: list[dict]) 
         lines += [f"- '{m['original']}' → '{m['corrected']}' ({m['category']})" for m in past_mistakes]
     lines += [
         "",
-        "Also analyze the learner's latest message precisely. Only list real errors; "
-        "don't 'correct' acceptable variants. Transcripts come from speech recognition, so ignore "
-        "punctuation and capitalization, and only mark pronunciation when the transcript makes it evident.",
+        "Also analyze the learner's latest message thoroughly and list EVERY error in `corrections`, one entry per "
+        "distinct error: grammar, conjugation, agreement, word order, wrong or unnatural word choice, register, "
+        "missing or extra words, and spelling in typed text. Check each clause; don't stop after the first error and "
+        "don't skip small ones a native speaker would notice. Native-sounding phrasing is acceptable, but "
+        "something that is correct yet clearly unnatural counts as a vocabulary or register error. Transcripts come "
+        "from speech recognition, so ignore punctuation and capitalization.",
+        "",
+        "Also judge whether the learner's latest message is a fitting response to YOUR previous message. "
+        "Compare what you asked or said (including its specific subject) with what they replied. If the reply "
+        "does not answer it, answers a different question, or doesn't fit the subject you were discussing, "
+        "set on_topic to false and fill off_topic_reason. Be decisive: don't give credit just because the "
+        "reply is grammatical or vaguely related. Do not flag a reply because it is short, simple or "
+        "grammatically wrong, or because they answer and then naturally move on. If it's likely "
+        "speech-recognition garble, still flag it. In your own reply, gently steer back or ask them to clarify.",
     ]
     return "\n".join(lines)
 
@@ -184,10 +205,26 @@ async def _structured(model_cls: type[BaseModel], system: str, contents, tempera
 
 
 async def tutor_turn(
-    target: str, native: str, k: dict, history: list[dict], learner_text: str, past_mistakes: list[dict]
+    target: str,
+    native: str,
+    k: dict,
+    history: list[dict],
+    learner_text: str,
+    past_mistakes: list[dict],
+    unclear_words: list[str] | None = None,
 ) -> TutorTurn:
     contents = _history_contents(history) + [types.Content(role="user", parts=[types.Part(text=learner_text)])]
-    return await _structured(TutorTurn, system_prompt(target, native, k, past_mistakes), contents)
+    system = system_prompt(target, native, k, past_mistakes)
+    last_tutor = next((h["text"] for h in reversed(history) if h["role"] == "assistant"), None)
+    if last_tutor:
+        system += f'\n\nYour previous message to the learner was: "{last_tutor}"\nCheck their latest message against it for on_topic.'
+    if unclear_words:
+        system += (
+            "\n\nThe speech recognizer was unsure about these words in the learner's latest message, which may "
+            f"mean they were mispronounced: {', '.join(unclear_words)}. Treat that as a hint, not proof: add a "
+            "pronunciation correction for each one you agree was likely mispronounced."
+        )
+    return await _structured(TutorTurn, system, contents)
 
 
 class _Labels(BaseModel):
