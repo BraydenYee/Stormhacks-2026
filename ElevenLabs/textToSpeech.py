@@ -7,6 +7,7 @@ from elevenlabs import VoiceSettings
 from pathlib import Path
 from speechToText import startRecording
 import tomllib
+#import gemini_chat
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent/"config.toml"
 DEFAULTS = {"language": "English", "level": "intermediate", "model": "gemini-3.8-flash"}
@@ -19,12 +20,89 @@ skillDict = {
 
 }
 
+# languageDict = {
+#     "afrikaans": "AFR" ,
+#     "arabic":""ARA"",
+#     "armenian" : "HYE",
+#     "assamese":"ASM",
+#     "azerbaijani" : "AZE",
+#     "belarusian":"BEL" ,
+#     "bengali": "BEN" ,
+#     "bosnian":"BOS" ,
+#     "bulgarian":"BUL",
+#     "catalan":"CAT" ,
+#     "cebuano":"CEB" ,
+#     "chichewa" : "NYA",
+#     "croatian": "HRV",
+#     "czech":"CES" ,
+#     "danish":"DAN" ,
+#     "dutch":"NLD" ,
+#     "english": "ENG",
+#     "estonian": "EST",
+#     "filipino": "FIL",
+#     "finnish":"FIN",
+#     "french":"FRA" ,
+#     "galician": "GLG",
+#     "georgian":"KAT" ,
+#     "german":"DEU" ,
+#     "greek":"ELL" ,
+#     "gujarati":"GUJ" ,
+#     "hausa":"HAU" ,
+#     "hebrew":"HEB" ,
+#     "hindi": "HIN",
+#     "hungarian":"HUN" ,
+#     "icelandic":"ISL" ,
+#     "indonesian":"IND" ,
+#     "irish":"GLE" ,
+#     "italian": "ITA",
+#     "japanese":"JPN" ,
+#     "javanese":"JAV" ,
+#     "kannada":"KAN" ,
+#     "kazakh":"KAZ" ,
+#     "kirghiz": "KIR" ,
+#     "korean": "KOR",
+#     "latvian":"LAV" ,
+#     "lingala":"LIN" ,
+#     "lithuanian":"LIT" ,
+#     "luxembourgish":"LTZ" ,
+#     "macedonian":"MKD" ,
+#     "malay":"MSA" ,
+#     "malayalam": "MAL",
+#     "mandarin chinese":"CMN",
+#     "marathi":"MAR" ,
+#     "nepali":"NEP" ,
+#     "norwegian":"NOR" ,
+#     "pashto":"PUS" ,
+#     "persian":"FAS" ,
+#     "polish": "POL",
+#     "portuguese":"POR" ,
+#     "punjabi":"PAN" ,
+#     "romanian": "RON",
+#     "russian":"RUS" ,
+#     "serbian":"SRP",
+#     "sindhi":"SND" ,
+#     "slovak":"SLK" ,
+#     "slovenian":"SLV" ,
+#     "somali":"SOM" ,
+#     "spanish":"SPA" ,
+#     "swahili":"SWA",
+#     "swedish":"SWE",
+#     "tamil": "TAM",
+#     "telugu":"TEL" ,
+#     "thai" : "THA", 
+#     "turkish" : "TUR",
+#     "ukrainian" : "UKR", 
+#     "urdu": "URD", 
+#     "vietnamese": "VIE",
+#     "welsh" : "CYM" 
+# }
+
 languageDict = {
-    "afrikaans": "AFR" ,
-    "arabic":"ARA",
-    "armenian" : "HYE",
-    "assamese":"ASM",
-    "azerbaijani" : "AZE",
+    "afrikaans": "aMNoVX2HjVcetNQmD15D" ,
+    "arabic":"hfqsl1OMbiWsgPpht3el",
+    "armenian" : "kyqw8ZqDBKvdhEqCx0j9",
+    "assamese":"TukQ1ITzWEkA6YPoCkaw",
+    "azerbaijani" : "Qc509wi3zyKZuolhdZxn",
     "belarusian":"BEL" ,
     "bengali": "BEN" ,
     "bosnian":"BOS" ,
@@ -32,28 +110,28 @@ languageDict = {
     "catalan":"CAT" ,
     "cebuano":"CEB" ,
     "chichewa" : "NYA",
-    "croatian": "HRV",
-    "czech":"CES" ,
+    "croatian": "hfqsl1OMbiWsgPpht3el",
+    "czech":"hfqsl1OMbiWsgPpht3el" ,
     "danish":"DAN" ,
-    "dutch":"NLD" ,
-    "english": "ENG",
+    "dutch":"hfqsl1OMbiWsgPpht3el" ,
+    "english": "hfqsl1OMbiWsgPpht3el",
     "estonian": "EST",
     "filipino": "FIL",
     "finnish":"FIN",
-    "french":"FRA" ,
+    "french":"hfqsl1OMbiWsgPpht3el" ,
     "galician": "GLG",
     "georgian":"KAT" ,
-    "german":"DEU" ,
-    "greek":"ELL" ,
+    "german":"g1jpii0iyvtRs8fqXsd1" ,
+    "greek":"g1jpii0iyvtRs8fqXsd1" ,
     "gujarati":"GUJ" ,
     "hausa":"HAU" ,
     "hebrew":"HEB" ,
-    "hindi": "HIN",
+    "hindi": "hfqsl1OMbiWsgPpht3el",
     "hungarian":"HUN" ,
     "icelandic":"ISL" ,
-    "indonesian":"IND" ,
+    "indonesian":"hfqsl1OMbiWsgPpht3el" ,
     "irish":"GLE" ,
-    "italian": "ITA",
+    "italian": "TukQ1ITzWEkA6YPoCkaw",
     "japanese":"JPN" ,
     "javanese":"JAV" ,
     "kannada":"KAN" ,
@@ -65,34 +143,34 @@ languageDict = {
     "lithuanian":"LIT" ,
     "luxembourgish":"LTZ" ,
     "macedonian":"MKD" ,
-    "malay":"MSA" ,
+    "malay":"hfqsl1OMbiWsgPpht3el" ,
     "malayalam": "MAL",
-    "mandarin chinese":"CMN",
+    "mandarin chinese":"hfqsl1OMbiWsgPpht3el",
     "marathi":"MAR" ,
     "nepali":"NEP" ,
-    "norwegian":"NOR" ,
+    "norwegian":"hfqsl1OMbiWsgPpht3el" ,
     "pashto":"PUS" ,
     "persian":"FAS" ,
-    "polish": "POL",
-    "portuguese":"POR" ,
+    "polish": "g1jpii0iyvtRs8fqXsd1",
+    "portuguese":"hfqsl1OMbiWsgPpht3el" ,
     "punjabi":"PAN" ,
-    "romanian": "RON",
-    "russian":"RUS" ,
+    "romanian": "hfqsl1OMbiWsgPpht3el",
+    "russian":"g1jpii0iyvtRs8fqXsd1" ,
     "serbian":"SRP",
     "sindhi":"SND" ,
     "slovak":"SLK" ,
     "slovenian":"SLV" ,
     "somali":"SOM" ,
-    "spanish":"SPA" ,
+    "spanish":"hfqsl1OMbiWsgPpht3el" ,
     "swahili":"SWA",
-    "swedish":"SWE",
-    "tamil": "TAM",
+    "swedish":"g1jpii0iyvtRs8fqXsd1",
+    "tamil": "hfqsl1OMbiWsgPpht3el",
     "telugu":"TEL" ,
     "thai" : "THA", 
-    "turkish" : "TUR",
-    "ukrainian" : "UKR", 
+    "turkish" : "hfqsl1OMbiWsgPpht3el",
+    "ukrainian" : "TukQ1ITzWEkA6YPoCkaw", 
     "urdu": "URD", 
-    "vietnamese": "VIE",
+    "vietnamese": "hfqsl1OMbiWsgPpht3el",
     "welsh" : "CYM" 
 }
 
@@ -119,28 +197,31 @@ def createAndPlayTextToSpeechMessage(text):
 
     with client.text_to_speech.with_raw_response.convert(
         text=text,
-        voice_id="r1KmysJdVYZjJCm4mL3b",
-        language_code="lang",
+        voice_id="Vu9gRjkR23ZG8EWrSmnj",
+        #voice_id="r1KmysJdVYZjJCm4mL3b",
+        #language_code=lang.lower(),
         voice_settings=VoiceSettings(
-        stability=0.0,
-        similarity_boost=1.0,
-        style=0.0,
-        use_speaker_boost=True,
-        speed=skillDict[skill.lower()]  
-    )
+            stability=0.0,
+            similarity_boost=1.0,
+            style=0.0,
+            use_speaker_boost=True,
+            speed=skillDict[skill.lower()]
+        )
         
     ) as response:
     # Access character cost from headers
-        char_cost = response.headers.get("character-cost")
-        print(char_cost)
+        #char_cost = response.headers.get("character-cost")
+        #print(char_cost)
         play(response.data)
 
 
 def main():
     #print(CONFIG_PATH.resolve(), CONFIG_PATH.exists())
     text = startRecording()
+    createAndPlayTextToSpeechMessage(text)
 
-    print(text)
+    
+    #print(text)
 
 if(__name__ == "__main__"):
     main()
