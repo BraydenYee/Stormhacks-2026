@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import db as dbmod
+from api.config import settings
 from api.db import get_db
 from api.ml import difficulty as diff
 from api.ml.features import CEFR_TO_NUM, compute_features, cosine
@@ -34,6 +35,7 @@ class CreateSession(BaseModel):
     user_id: uuid.UUID
     target_lang: str
     topic: str | None = None
+    level: str | None = None  # e.g. "beginner" / "B1"; omit to keep the learner's current level
 
 
 class Speak(BaseModel):
@@ -152,9 +154,20 @@ async def start_session(body: CreateSession, db: AsyncSession = Depends(get_db))
             LearnerProfile.user_id == user.id, LearnerProfile.target_lang == body.target_lang
         )
     )
+    chosen = None
+    if body.level:
+        chosen = diff.level_to_difficulty(body.level)
+        if chosen is None:
+            raise HTTPException(422, f"unknown level '{body.level}'")
     if not profile:
-        profile = LearnerProfile(user_id=user.id, target_lang=body.target_lang, difficulty=START_DIFFICULTY, stats={})
+        # New learner: the level they picked, else config.toml's level, else the built-in default.
+        start = chosen or diff.level_to_difficulty(settings.default_level) or START_DIFFICULTY
+        profile = LearnerProfile(user_id=user.id, target_lang=body.target_lang, difficulty=start, stats={})
         db.add(profile)
+    elif chosen is not None:
+        # An explicit pick beats the stored level; the controller adapts from there.
+        profile.difficulty = chosen
+        profile.stats = {k: v for k, v in (profile.stats or {}).items() if k != "smoothed_p"}
 
     topic = body.topic or DEFAULT_TOPIC
     k = diff.knobs(profile.difficulty)

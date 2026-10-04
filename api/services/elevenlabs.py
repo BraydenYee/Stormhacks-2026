@@ -41,8 +41,10 @@ async def synthesize(text: str, speed: float = 1.0) -> bytes:
             "text": text,
             "model_id": settings.elevenlabs_tts_model,
             "voice_settings": {
-                "stability": 0.5,
-                "similarity_boost": 0.75,
+                "stability": settings.elevenlabs_stability,
+                "similarity_boost": settings.elevenlabs_similarity_boost,
+                "style": settings.elevenlabs_style,
+                "use_speaker_boost": settings.elevenlabs_speaker_boost,
                 "speed": max(0.7, min(1.2, speed)),
             },
         },

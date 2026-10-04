@@ -15,6 +15,30 @@ GAIN_DOWN = 0.5
 EMA_ALPHA = 0.6  # weight of the newest turn in the smoothed performance
 
 
+# Names a person might type in config.toml or pick in the UI → starting difficulty (1–6 ≈ A1–C2).
+LEVEL_NAMES = {
+    "beginner": 1.5,
+    "elementary": 2.0,
+    "intermediate": 3.0,
+    "upper-intermediate": 4.0,
+    "advanced": 5.0,
+    "native": 6.0,
+    "a1": 1.0,
+    "a2": 2.0,
+    "b1": 3.0,
+    "b2": 4.0,
+    "c1": 5.0,
+    "c2": 6.0,
+}
+
+
+def level_to_difficulty(level: str | None) -> float | None:
+    """'beginner' / 'B1' / 'upper intermediate' → difficulty, or None if unrecognised."""
+    if not level:
+        return None
+    return LEVEL_NAMES.get(level.strip().lower().replace(" ", "-"))
+
+
 def clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, x))
 

@@ -30,6 +30,15 @@ export type SessionState = {
   turns: { id: number; role: "user" | "assistant"; text: string; translation: string | null; corrections: Correction[] }[];
 };
 
+/** What the shared config.toml / ElevenLabs settings currently resolve to on the server. */
+export type AppConfig = {
+  language: string | null;
+  language_name: string;
+  level: string | null;
+  gemini_model: string;
+  elevenlabs: { voice_id: string; stt_model: string; tts_model: string };
+};
+
 export type Topic = { id: number; title: string; description: string; cefr_min: number };
 
 export type Summary = {
@@ -88,8 +97,9 @@ const json = (body: unknown): RequestInit => ({
 
 export const api = {
   createUser: (native_lang: string) => req<{ id: string }>("/users", json({ native_lang })),
-  startSession: (user_id: string, target_lang: string, topic?: string) =>
-    req<StartResult>("/sessions", json({ user_id, target_lang, topic })),
+  config: () => req<AppConfig>("/config"),
+  startSession: (user_id: string, target_lang: string, topic?: string, level?: string) =>
+    req<StartResult>("/sessions", json({ user_id, target_lang, topic, level })),
   getSession: (id: string) => req<SessionState>(`/sessions/${id}`),
   sendAudio: (id: string, blob: Blob) => {
     const fd = new FormData();

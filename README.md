@@ -16,6 +16,15 @@ analyses each learner turn, and every turn is embedded (pgvector) to drive adapt
    ```
 4. **Web**: `cd web && npm install && npm run dev` → http://localhost:3000
 
+## Where the team's settings plug in
+
+- `config.toml` (shared with `gemini_chat.py`): `model` is the Gemini model the web app uses, `language`
+  preselects the language on the landing page, `level` is where brand-new learners start. Restart the API
+  after editing. A `GEMINI_MODEL` env var overrides `model`.
+- `ElevenLabs/textToSpeech.py`: its voice ID and voice settings are the defaults in `api/config.py`
+  (`elevenlabs_voice_id`, `elevenlabs_stability`, …); `speechToText.py`'s `scribe_v2` is the STT default.
+- See what the server resolved: http://localhost:8000/config
+
 ## How it works
 
 - `api/routers/sessions.py` — the turn loop: STT → embed → retrieve similar past mistakes → Gemini

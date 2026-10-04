@@ -114,14 +114,37 @@ def _history_contents(history: list[dict]) -> list[types.Content]:
 RETRYABLE_CODES = {429, 500, 503, 504}
 
 
+# Latency matters more than deep reasoning for a live conversation, so turn thinking down. Models disagree
+# on how: some take a token budget of 0, others only accept a level, some take neither. Try each in turn.
+THINKING_OPTIONS = [
+    types.ThinkingConfig(thinking_budget=0),
+    types.ThinkingConfig(thinking_level="MINIMAL"),
+    None,
+]
+_thinking_choice: dict[str, int] = {}  # model -> index of the option it accepted
+
+
+async def _generate(model: str, contents, base: dict):
+    for i in range(_thinking_choice.get(model, 0), len(THINKING_OPTIONS)):
+        config = types.GenerateContentConfig(**base, thinking_config=THINKING_OPTIONS[i])
+        try:
+            resp = await client().aio.models.generate_content(model=model, contents=contents, config=config)
+        except genai_errors.APIError as e:
+            if e.code != 400 or i == len(THINKING_OPTIONS) - 1:
+                raise
+            log.info("%s rejected thinking option %d, trying the next", model, i)
+            continue
+        _thinking_choice[model] = i
+        return resp
+
+
 async def _structured(model_cls: type[BaseModel], system: str, contents, temperature: float = 0.7):
-    config = types.GenerateContentConfig(
+    base = dict(
         system_instruction=system,
         response_mime_type="application/json",
         response_schema=model_cls,
         temperature=temperature,
-        # Latency matters more than deep reasoning for a live conversation.
-        thinking_config=types.ThinkingConfig(thinking_budget=0),
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
     # Overload (503) is usually brief: retry the primary model with backoff, then try the fallback once.
     attempts = [(settings.gemini_model, d) for d in (0.0, 1.0, 2.0, 4.0)]
@@ -132,7 +155,7 @@ async def _structured(model_cls: type[BaseModel], system: str, contents, tempera
         if delay:
             await asyncio.sleep(delay)
         try:
-            resp = await client().aio.models.generate_content(model=model, contents=contents, config=config)
+            resp = await _generate(model, contents, base)
             break
         except genai_errors.APIError as e:
             if e.code not in RETRYABLE_CODES:

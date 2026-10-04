@@ -1,8 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { api, getUserId, LANGUAGES } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { api, getUserId, LANGUAGES, type AppConfig } from "@/lib/api";
+
+const LEVELS = [
+  { value: "", label: "Auto — continue from my current level" },
+  { value: "beginner", label: "Beginner" },
+  { value: "intermediate", label: "Intermediate" },
+  { value: "advanced", label: "Advanced" },
+];
 
 const STARTERS = [
   "Introducing yourself and daily life",
@@ -15,15 +22,28 @@ export default function Home() {
   const router = useRouter();
   const [lang, setLang] = useState("es");
   const [topic, setTopic] = useState(STARTERS[0]);
+  const [level, setLevel] = useState("");
+  const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Preselect the language from the shared config.toml. Best effort: the page works without it.
+  useEffect(() => {
+    api
+      .config()
+      .then((c) => {
+        setCfg(c);
+        if (c.language && c.language in LANGUAGES) setLang(c.language);
+      })
+      .catch(() => {});
+  }, []);
 
   async function start() {
     setBusy(true);
     setError(null);
     try {
       const userId = await getUserId();
-      const s = await api.startSession(userId, lang, topic);
+      const s = await api.startSession(userId, lang, topic, level || undefined);
       // Stash the opener so the session page can show and play it without a second request.
       sessionStorage.setItem(`opener:${s.session_id}`, JSON.stringify(s));
       router.push(`/session/${s.session_id}`);
@@ -56,6 +76,22 @@ export default function Home() {
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium">Starting level</span>
+          <select
+            value={level}
+            onChange={(e) => setLevel(e.target.value)}
+            className="w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 dark:border-white/20"
+          >
+            {LEVELS.map((l) => (
+              <option key={l.value} value={l.value} className="text-black">
+                {l.label}
+              </option>
+            ))}
+          </select>
+          {cfg?.level && <span className="block text-xs opacity-60">New learners start at “{cfg.level}” (from config.toml).</span>}
         </label>
 
         <div className="space-y-1.5">
