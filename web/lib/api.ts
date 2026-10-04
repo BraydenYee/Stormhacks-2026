@@ -14,16 +14,11 @@ export type TurnResult = {
 
 export type StartResult = {
   session_id: string;
-  topic: string;
   difficulty: Difficulty;
-  assistant_turn: TurnResult["assistant_turn"];
-  audio_b64: string | null;
-  audio_mime: string;
 };
 
 export type SessionState = {
   id: string;
-  topic: string;
   target_lang: string;
   ended: boolean;
   difficulty: Difficulty;
@@ -39,8 +34,6 @@ export type AppConfig = {
   elevenlabs: { voice_id: string; stt_model: string; tts_model: string };
 };
 
-export type Topic = { id: number; title: string; description: string; cefr_min: number };
-
 export type Summary = {
   turns: number;
   words_spoken: number;
@@ -52,7 +45,6 @@ export type Summary = {
   errors_by_category: Record<string, number>;
   mistakes: Correction[];
   vocab_to_review: (Vocab & { times_misused: number })[];
-  suggested_topics: Topic[];
   coach_note: string | null;
 };
 
@@ -65,7 +57,6 @@ export type Analytics =
       totals: { sessions: number; turns: number; mistakes: number };
       sessions: {
         id: string;
-        topic: string;
         date: string;
         difficulty_start: number;
         difficulty_end: number;
@@ -74,7 +65,6 @@ export type Analytics =
       }[];
       weak_spots: { label: string; size: number; category: string; examples: { original: string; corrected: string }[] }[];
       vocab_to_review: (Vocab & { times_misused: number; times_heard: number; times_used: number })[];
-      recommended_topics: Topic[];
     };
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -98,8 +88,8 @@ const json = (body: unknown): RequestInit => ({
 export const api = {
   createUser: (native_lang: string) => req<{ id: string }>("/users", json({ native_lang })),
   config: () => req<AppConfig>("/config"),
-  startSession: (user_id: string, target_lang: string, topic?: string, level?: string) =>
-    req<StartResult>("/sessions", json({ user_id, target_lang, topic, level })),
+  startSession: (user_id: string, target_lang: string, level?: string) =>
+    req<StartResult>("/sessions", json({ user_id, target_lang, level })),
   getSession: (id: string) => req<SessionState>(`/sessions/${id}`),
   sendAudio: (id: string, blob: Blob) => {
     const fd = new FormData();

@@ -1,4 +1,4 @@
-"""Embedding-based insights: weak-spot clustering, vocab review, topic recommendations."""
+"""Embedding-based insights: weak-spot clustering and vocab review scoring."""
 
 from collections import Counter
 
@@ -49,14 +49,3 @@ def vocab_review_score(times_heard: int, times_used: int, times_misused: int) ->
     misuse_rate = times_misused / max(times_used, 1)
     passive_only = 1.0 if times_heard > 0 and times_used == 0 else 0.0
     return round(2.0 * misuse_rate + 0.5 * min(times_misused, 4) + passive_only, 3)
-
-
-def interest_centroid(turns: list[dict], top_frac: float = 0.5) -> list[float] | None:
-    """Mean embedding of the learner's most engaged turns (longest replies)."""
-    items = [t for t in turns if t.get("embedding") is not None]
-    if not items:
-        return None
-    items.sort(key=lambda t: -t.get("word_count", 0))
-    keep = items[: max(1, int(len(items) * top_frac))]
-    centroid = _normalize(np.asarray([t["embedding"] for t in keep], dtype=float)).mean(axis=0)
-    return centroid.tolist()

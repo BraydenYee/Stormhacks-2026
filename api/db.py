@@ -66,7 +66,16 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
-        for table in ("turns", "mistakes", "topics"):
+        # Databases created before topics were removed still have `sessions.topic NOT NULL`, which would
+        # reject new sessions. Relax it (non-destructive: the old column and the unused `topics` table stay).
+        await conn.execute(
+            text(
+                "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'sessions' AND column_name = 'topic') "
+                "THEN ALTER TABLE sessions ALTER COLUMN topic DROP NOT NULL; END IF; END $$"
+            )
+        )
+        for table in ("turns", "mistakes"):
             await conn.execute(
                 text(
                     f"CREATE INDEX IF NOT EXISTS ix_{table}_embedding_hnsw "

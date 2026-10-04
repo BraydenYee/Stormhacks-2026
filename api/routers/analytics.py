@@ -10,7 +10,7 @@ from api.db import get_db
 from api.ml import difficulty as diff
 from api.ml.insights import cluster_mistakes
 from api.models import ConversationSession, LearnerProfile, Mistake, Turn, User
-from api.recs import recommend_topics, vocab_to_review
+from api.recs import vocab_to_review
 from api.services import llm
 
 log = logging.getLogger(__name__)
@@ -96,7 +96,6 @@ async def analytics(user_id: uuid.UUID, lang: str | None = None, db: AsyncSessio
         "sessions": [
             {
                 "id": str(s.id),
-                "topic": s.topic,
                 "date": s.created_at.isoformat(),
                 "difficulty_start": s.start_difficulty,
                 "difficulty_end": s.end_difficulty if s.end_difficulty is not None else profile.difficulty,
@@ -107,5 +106,4 @@ async def analytics(user_id: uuid.UUID, lang: str | None = None, db: AsyncSessio
         ],
         "weak_spots": clusters,
         "vocab_to_review": await vocab_to_review(db, user_id, lang, limit=10),
-        "recommended_topics": await recommend_topics(db, user_id, lang, profile.difficulty),
     }

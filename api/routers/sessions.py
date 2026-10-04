@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import logging
 import uuid
@@ -15,14 +16,15 @@ from api.db import get_db
 from api.ml import difficulty as diff
 from api.ml.features import CEFR_TO_NUM, compute_features, cosine
 from api.models import ConversationSession, LearnerProfile, Mistake, Turn, User, Vocab
-from api.recs import recommend_topics, vocab_to_review
-from api.services import elevenlabs, llm
+from api.recs import vocab_to_review
+from api.services import llm
+from api.services.elevenlabs.speechToText import getTranscript
+from api.services.elevenlabs.textToSpeech import createTextToSpeechAudio
 from api.services.embeddings import embed
 
 log = logging.getLogger(__name__)
 router = APIRouter()
 
-DEFAULT_TOPIC = "Introducing yourself and daily life"
 START_DIFFICULTY = 2.0
 
 
@@ -34,7 +36,6 @@ class CreateUser(BaseModel):
 class CreateSession(BaseModel):
     user_id: uuid.UUID
     target_lang: str
-    topic: str | None = None
     level: str | None = None  # e.g. "beginner" / "B1"; omit to keep the learner's current level
 
 
@@ -49,7 +50,7 @@ async def speak(body: Speak):
     text = body.text.strip()[:1000]
     if not text:
         raise HTTPException(422, "empty text")
-    audio = await elevenlabs.synthesize(text, body.speed)
+    audio = await asyncio.to_thread(createTextToSpeechAudio, text, body.speed)
     return {"audio_b64": base64.b64encode(audio).decode(), "audio_mime": "audio/mpeg"}
 
 
@@ -118,7 +119,7 @@ async def _past_mistakes(db: AsyncSession, user_id: uuid.UUID, lang: str, emb: l
 async def _tts(text: str, speed: float) -> str | None:
     """TTS failure shouldn't lose the turn — the UI falls back to text only."""
     try:
-        return base64.b64encode(await elevenlabs.synthesize(text, speed)).decode()
+        return base64.b64encode(await asyncio.to_thread(createTextToSpeechAudio, text, speed)).decode()
     except Exception:
         log.exception("TTS failed")
         return None
@@ -169,40 +170,14 @@ async def start_session(body: CreateSession, db: AsyncSession = Depends(get_db))
         profile.difficulty = chosen
         profile.stats = {k: v for k, v in (profile.stats or {}).items() if k != "smoothed_p"}
 
-    topic = body.topic or DEFAULT_TOPIC
-    k = diff.knobs(profile.difficulty)
-    opener = await llm.opener(body.target_lang, user.native_lang, topic, k)
-
-    session = ConversationSession(
-        user_id=user.id, target_lang=body.target_lang, topic=topic, start_difficulty=profile.difficulty
-    )
+    # The learner speaks first: no tutor line is generated here, the first turn comes from POST /turns.
+    session = ConversationSession(user_id=user.id, target_lang=body.target_lang, start_difficulty=profile.difficulty)
     db.add(session)
-    await db.flush()
-    turn = Turn(
-        session_id=session.id,
-        role="assistant",
-        text=opener.reply,
-        translation=opener.reply_translation,
-        difficulty_at_turn=profile.difficulty,
-    )
-    db.add(turn)
-    await _bump_vocab(
-        db, user.id, body.target_lang, [v.model_dump() for v in opener.new_vocab_introduced], "times_heard"
-    )
     await db.commit()
 
     return {
         "session_id": str(session.id),
-        "topic": topic,
-        "difficulty": {"value": profile.difficulty, "cefr": k["cefr"]},
-        "assistant_turn": {
-            "id": turn.id,
-            "text": opener.reply,
-            "translation": opener.reply_translation,
-            "new_vocab": [v.model_dump() for v in opener.new_vocab_introduced],
-        },
-        "audio_b64": await _tts(opener.reply, k["tts_speed"]),
-        "audio_mime": "audio/mpeg",
+        "difficulty": {"value": profile.difficulty, "cefr": diff.cefr_label(profile.difficulty)},
     }
 
 
@@ -225,7 +200,9 @@ async def post_turn(
         data = await audio.read()
         if not data:
             raise HTTPException(422, "empty audio")
-        stt = await elevenlabs.transcribe(data, audio.filename or "audio.webm", audio.content_type or "audio/webm")
+        stt = await asyncio.to_thread(
+            getTranscript, (audio.filename or "audio.webm", data, audio.content_type or "audio/webm")
+        )
         text, stt_words = stt["text"], stt["words"]
         if stt_words:
             audio_s = stt_words[-1].get("end")
@@ -250,7 +227,6 @@ async def post_turn(
     turn = await llm.tutor_turn(
         session.target_lang,
         user.native_lang,
-        session.topic,
         k,
         [{"role": t.role, "text": t.text} for t in history],
         text,
@@ -357,7 +333,6 @@ async def _build_summary(db: AsyncSession, session: ConversationSession, user: U
             for m in mistakes
         ],
         "vocab_to_review": await vocab_to_review(db, user.id, session.target_lang),
-        "suggested_topics": await recommend_topics(db, user.id, session.target_lang, profile.difficulty, limit=2),
     }
     try:
         summary["coach_note"] = await llm.coach_note(session.target_lang, user.native_lang, stats) if user_turns else None
@@ -402,7 +377,6 @@ async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db))
         )
     return {
         "id": str(session.id),
-        "topic": session.topic,
         "target_lang": session.target_lang,
         "ended": session.ended_at is not None,
         "difficulty": {"value": profile.difficulty, "cefr": diff.cefr_label(profile.difficulty)},

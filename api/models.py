@@ -39,7 +39,6 @@ class ConversationSession(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     target_lang: Mapped[str] = mapped_column(String(10))
-    topic: Mapped[str] = mapped_column(String(200))
     start_difficulty: Mapped[float] = mapped_column(Float)
     end_difficulty: Mapped[float | None] = mapped_column(Float)
     summary: Mapped[dict | None] = mapped_column(JSONB)
@@ -88,12 +87,3 @@ class Vocab(Base):
     times_used: Mapped[int] = mapped_column(Integer, default=0)
     times_misused: Mapped[int] = mapped_column(Integer, default=0)
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-
-class Topic(Base):
-    __tablename__ = "topics"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    title: Mapped[str] = mapped_column(String(200), unique=True)
-    description: Mapped[str] = mapped_column(Text)
-    cefr_min: Mapped[float] = mapped_column(Float, default=1.0)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(DIM))

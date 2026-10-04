@@ -10,6 +10,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 from api.config import settings
+from api.services.gemini_chat import build_system_instruction, generation_config
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +57,9 @@ class NewVocab(VocabItem):
 
 class LearnerAnalysis(BaseModel):
     corrections: list[Correction]
-    on_topic: bool = Field(description="Did the learner respond meaningfully to what the tutor said?")
+    on_topic: bool = Field(
+        description="Did the learner respond meaningfully to what the tutor said? Always true for their first message."
+    )
     used_native_language: bool = Field(description="Did the learner fall back to their native language for a substantial part?")
     vocab_used: list[VocabItem] = Field(description="Content words the learner used correctly (max 8)")
     estimated_cefr: str = Field(description="Your estimate of the learner's level from this turn: A1–C2")
@@ -69,24 +72,22 @@ class TutorTurn(BaseModel):
     new_vocab_introduced: list[NewVocab] = Field(description="Words in your reply likely new at this level (max 3)")
 
 
-class Opener(BaseModel):
-    reply: str
-    reply_translation: str
-    new_vocab_introduced: list[NewVocab]
-
-
 # ---------- prompts ----------
 
 
-def system_prompt(target: str, native: str, topic: str, k: dict, past_mistakes: list[dict]) -> str:
+def system_prompt(target: str, native: str, k: dict, past_mistakes: list[dict]) -> str:
     lines = [
-        f"You are a warm, curious conversation partner helping someone practice {LANGUAGES.get(target, target)}.",
-        f"The learner's native language is {LANGUAGES.get(native, native)}. Today's topic: {topic}.",
+        # Language and level rule from gemini_chat.py; the rest adds the tutoring behaviour.
+        build_system_instruction(LANGUAGES.get(target, target), k["cefr"]),
+        "That applies to your spoken `reply`. Write every explanation, translation and word meaning "
+        f"in the learner's native language, {LANGUAGES.get(native, native)}.",
+        f"You are a warm, curious conversation partner helping someone practice {LANGUAGES.get(target, target)}. "
+        "The learner speaks first and chooses what to talk about; follow their lead.",
         "Your job is to keep a natural spoken conversation going — conversation is how they learn.",
         "",
-        f"Speak at CEFR level {k['cefr']}:",
+        "Limits for your reply:",
         f"- At most {k['max_sentences']} sentences, each at most {k['max_sentence_words']} words.",
-        f"- Use vocabulary appropriate for {k['cefr']}; {'idioms are welcome' if k['idioms'] else 'avoid idioms and slang'}.",
+        f"- {'Idioms are welcome.' if k['idioms'] else 'Avoid idioms and slang.'}",
         f"- Native-language glosses in parentheses: {k['native_gloss']}.",
         f"- Corrections: {k['correction_style']}. A recast means naturally repeating their idea correctly in your reply.",
         "- Always end with a question or prompt that invites them to keep talking.",
@@ -126,7 +127,7 @@ _thinking_choice: dict[str, int] = {}  # model -> index of the option it accepte
 
 async def _generate(model: str, contents, base: dict):
     for i in range(_thinking_choice.get(model, 0), len(THINKING_OPTIONS)):
-        config = types.GenerateContentConfig(**base, thinking_config=THINKING_OPTIONS[i])
+        config = generation_config(**base, thinking_config=THINKING_OPTIONS[i])
         try:
             resp = await client().aio.models.generate_content(model=model, contents=contents, config=config)
         except genai_errors.APIError as e:
@@ -144,7 +145,6 @@ async def _structured(model_cls: type[BaseModel], system: str, contents, tempera
         response_mime_type="application/json",
         response_schema=model_cls,
         temperature=temperature,
-        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
     # Overload (503) is usually brief: retry the primary model with backoff, then try the fallback once.
     attempts = [(settings.gemini_model, d) for d in (0.0, 1.0, 2.0, 4.0)]
@@ -170,16 +170,10 @@ async def _structured(model_cls: type[BaseModel], system: str, contents, tempera
 
 
 async def tutor_turn(
-    target: str, native: str, topic: str, k: dict, history: list[dict], learner_text: str, past_mistakes: list[dict]
+    target: str, native: str, k: dict, history: list[dict], learner_text: str, past_mistakes: list[dict]
 ) -> TutorTurn:
     contents = _history_contents(history) + [types.Content(role="user", parts=[types.Part(text=learner_text)])]
-    return await _structured(TutorTurn, system_prompt(target, native, topic, k, past_mistakes), contents)
-
-
-async def opener(target: str, native: str, topic: str, k: dict) -> Opener:
-    system = system_prompt(target, native, topic, k, [])
-    msg = "Start the conversation: greet the learner briefly and ask an easy, open question about the topic."
-    return await _structured(Opener, system, msg)
+    return await _structured(TutorTurn, system_prompt(target, native, k, past_mistakes), contents)
 
 
 class _Labels(BaseModel):

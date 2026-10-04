@@ -5,12 +5,12 @@ import { use, useEffect, useRef, useState } from "react";
 import DifficultyMeter from "@/components/DifficultyMeter";
 import Recorder from "@/components/Recorder";
 import Transcript, { type Message } from "@/components/Transcript";
-import { api, playBase64, type StartResult, type Summary, type TurnResult } from "@/lib/api";
+import { api, LANGUAGES, playBase64, type Summary, type TurnResult } from "@/lib/api";
 
 export default function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [topic, setTopic] = useState("");
+  const [language, setLanguage] = useState("");
   const [difficulty, setDifficulty] = useState(2);
   const [cefr, setCefr] = useState("A2");
   const [pending, setPending] = useState(false);
@@ -27,26 +27,17 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
     audioRef.current = playBase64(b64, mime);
   }
 
-  // Restore the conversation: the opener is handed over from the landing page; a refresh reloads from the API.
+  // Load the session. A new one has no turns yet: the learner speaks first.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const s = await api.getSession(id);
         if (cancelled) return;
-        setTopic(s.topic);
+        setLanguage(LANGUAGES[s.target_lang] ?? s.target_lang);
         setDifficulty(s.difficulty.value);
         setCefr(s.difficulty.cefr);
-        const raw = sessionStorage.getItem(`opener:${id}`);
-        const o: StartResult | null = raw ? JSON.parse(raw) : null;
-        if (raw) sessionStorage.removeItem(`opener:${id}`);
-        // Keep the opener's audio on its message so the Play button doesn't need another TTS call.
-        setMessages(
-          s.turns.map((t) =>
-            o && t.id === o.assistant_turn.id && o.audio_b64 ? { ...t, audio: { b64: o.audio_b64, mime: o.audio_mime } } : { ...t },
-          ),
-        );
-        if (o) play(o.audio_b64, o.audio_mime);
+        setMessages(s.turns.map((t) => ({ ...t })));
         if (s.ended) setSummary(await api.endSession(id));
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Couldn't load session");
@@ -130,8 +121,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
     <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-wide opacity-50">Topic</p>
-          <h1 className="text-lg font-semibold">{topic || "…"}</h1>
+          <p className="text-xs uppercase tracking-wide opacity-50">Practicing</p>
+          <h1 className="text-lg font-semibold">{language || "…"}</h1>
         </div>
         <div className="text-right">
           <p className="mb-1 text-xs opacity-60">Level {cefr}</p>
@@ -140,6 +131,11 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       </div>
 
       <div className="flex-1">
+        {messages.length === 0 && !pending && (
+          <p className="mt-16 text-center opacity-60">
+            Hold the button below and say something{language ? ` in ${language}` : ""} to begin. The tutor will reply.
+          </p>
+        )}
         <Transcript messages={messages} pending={pending} onPlay={playMessage} loadingId={loadingAudio} />
         <div ref={bottomRef} />
       </div>
@@ -171,12 +167,12 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         <div className="flex flex-col items-center gap-1">
           <button
             onClick={end}
-            disabled={ending || pending || messages.length < 3}
+            disabled={ending || pending || messages.length < 2}
             className="rounded-lg border border-black/20 px-4 py-2 text-sm font-medium transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/25 dark:hover:bg-white/10"
           >
             {ending ? "Wrapping up… (can take a few seconds)" : "End session & see summary"}
           </button>
-          {messages.length < 3 && <p className="text-xs opacity-60">Send at least one reply to finish the session.</p>}
+          {messages.length < 2 && <p className="text-xs opacity-60">Say something first to be able to finish the session.</p>}
         </div>
       </div>
     </div>
@@ -220,20 +216,6 @@ function SummaryView({ summary: s }: { summary: Summary }) {
               <li key={v.lemma} className="rounded-lg border border-black/10 px-3 py-2 dark:border-white/15">
                 <span className="font-medium">{v.lemma}</span> {v.cefr && <span className="text-xs opacity-50">{v.cefr}</span>}
                 {v.meaning && <p className="text-sm opacity-70">{v.meaning}</p>}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {s.suggested_topics.length > 0 && (
-        <section>
-          <h2 className="mb-2 font-medium">Try next</h2>
-          <ul className="space-y-2">
-            {s.suggested_topics.map((t) => (
-              <li key={t.id} className="rounded-lg border border-black/10 px-3 py-2 dark:border-white/15">
-                <span className="font-medium">{t.title}</span>
-                <p className="text-sm opacity-70">{t.description}</p>
               </li>
             ))}
           </ul>

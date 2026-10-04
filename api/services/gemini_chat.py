@@ -10,7 +10,8 @@ from google.genai import types
 
 load_dotenv()
 
-CONFIG_PATH = Path(__file__).with_name("config.toml")
+# config.toml sits at the project root, shared by this CLI and the web app (api/config.py).
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.toml"
 DEFAULTS = {"language": "English", "level": "intermediate", "model": "gemini-3.8-flash"}
 
 
@@ -24,14 +25,24 @@ def load_config() -> dict:
             sys.exit(f"Error: invalid {CONFIG_PATH.name}: {e}")
 
 
-def ask_gemini(client: genai.Client, model: str, text: str, language: str, level: str) -> str:
-    config = types.GenerateContentConfig(
-        system_instruction=(
-            f"Always respond in {language}, regardless of the language the user writes in. "
-            f"Use vocabulary and grammar suited to a {level} speaker of {language}."
-        ),
-        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+def build_system_instruction(language: str, level: str) -> str:
+    # The web app's tutor prompt (api/services/llm.py) starts with this same instruction.
+    return (
+        f"Always respond in {language}, regardless of the language the user writes in. "
+        f"Use vocabulary and grammar suited to a {level} speaker of {language}."
     )
+
+
+def generation_config(**kwargs) -> types.GenerateContentConfig:
+    # Shared by the CLI and the web app; automatic function calling is off because no tools are used.
+    return types.GenerateContentConfig(
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        **kwargs,
+    )
+
+
+def ask_gemini(client: genai.Client, model: str, text: str, language: str, level: str) -> str:
+    config = generation_config(system_instruction=build_system_instruction(language, level))
     response = client.models.generate_content(model=model, contents=text, config=config)
     return response.text
 

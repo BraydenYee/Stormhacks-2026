@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChartCard, DifficultyLine, ErrorStack } from "@/components/Charts";
 import { api, getUserId, LANGUAGES, type Analytics } from "@/lib/api";
@@ -27,36 +26,18 @@ function foldErrors(errors: Record<string, number>) {
 }
 
 export default function Dashboard() {
-  const router = useRouter();
   const [data, setData] = useState<Analytics | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [starting, setStarting] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const id = await getUserId();
-        setUserId(id);
-        setData(await api.analytics(id));
+        setData(await api.analytics(await getUserId()));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Couldn't load analytics");
       }
     })();
   }, []);
-
-  async function practice(topicId: number, title: string, lang: string) {
-    if (!userId) return;
-    setStarting(topicId);
-    try {
-      const s = await api.startSession(userId, lang, title);
-      sessionStorage.setItem(`opener:${s.session_id}`, JSON.stringify(s));
-      router.push(`/session/${s.session_id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't start session");
-      setStarting(null);
-    }
-  }
 
   if (error) return <p className="text-red-600">{error}</p>;
   if (!data) return <p className="opacity-60">Loading…</p>;
@@ -72,7 +53,7 @@ export default function Dashboard() {
     );
 
   const d: Full = data;
-  const sessions = d.sessions.map((s, i) => ({ ...s, label: `#${i + 1}` }));
+  const sessions = d.sessions.map((s, i) => ({ ...s, label: `#${i + 1}`, day: new Date(s.date).toLocaleDateString() }));
   const usedKeys = ERROR_KEYS.filter((k) => sessions.some((s) => foldErrors(s.errors)[k.key]));
 
   return (
@@ -94,11 +75,11 @@ export default function Dashboard() {
           title="Difficulty over time"
           subtitle="Where the tutor ended each session, on the A1–C2 scale"
           table={{
-            head: ["Session", "Topic", "Start", "End"],
-            rows: sessions.map((s) => [s.label, s.topic, s.difficulty_start.toFixed(2), s.difficulty_end.toFixed(2)]),
+            head: ["Session", "Date", "Start", "End"],
+            rows: sessions.map((s) => [s.label, s.day, s.difficulty_start.toFixed(2), s.difficulty_end.toFixed(2)]),
           }}
         >
-          <DifficultyLine points={sessions.map((s) => ({ label: s.label, value: s.difficulty_end, topic: s.topic }))} />
+          <DifficultyLine points={sessions.map((s) => ({ label: s.label, value: s.difficulty_end, detail: s.day }))} />
         </ChartCard>
 
         <ChartCard
@@ -106,16 +87,16 @@ export default function Dashboard() {
           subtitle="By category"
           legend={usedKeys.map((k) => ({ label: k.label, color: k.color }))}
           table={{
-            head: ["Session", "Topic", ...ERROR_KEYS.map((k) => k.label)],
+            head: ["Session", "Date", ...ERROR_KEYS.map((k) => k.label)],
             rows: sessions.map((s) => {
               const f = foldErrors(s.errors);
-              return [s.label, s.topic, ...ERROR_KEYS.map((k) => f[k.key] ?? 0)];
+              return [s.label, s.day, ...ERROR_KEYS.map((k) => f[k.key] ?? 0)];
             }),
           }}
         >
           <ErrorStack
             keys={usedKeys}
-            data={sessions.map((s) => ({ label: s.label, topic: s.topic, segments: foldErrors(s.errors) }))}
+            data={sessions.map((s) => ({ label: s.label, detail: s.day, segments: foldErrors(s.errors) }))}
           />
         </ChartCard>
       </div>
@@ -145,53 +126,26 @@ export default function Dashboard() {
         )}
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section>
-          <h2 className="mb-2 font-medium">Words to review</h2>
-          {d.vocab_to_review.length === 0 ? (
-            <p className="text-sm opacity-60">Nothing to review yet.</p>
-          ) : (
-            <ul className="divide-y divide-black/10 rounded-xl border border-black/10 dark:divide-white/15 dark:border-white/15">
-              {d.vocab_to_review.map((v) => (
-                <li key={v.lemma} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                  <div>
-                    <span className="font-medium">{v.lemma}</span> {v.cefr && <span className="text-xs opacity-50">{v.cefr}</span>}
-                    {v.meaning && <p className="opacity-70">{v.meaning}</p>}
-                  </div>
-                  <span className="shrink-0 text-xs opacity-60">
-                    {v.times_misused > 0 ? `${v.times_misused} slip${v.times_misused > 1 ? "s" : ""}` : "heard, not used"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section>
-          <h2 className="mb-2 font-medium">Suggested next conversations</h2>
-          {d.recommended_topics.length === 0 ? (
-            <p className="text-sm opacity-60">No suggestions yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {d.recommended_topics.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-3 rounded-xl border border-black/10 px-3 py-2 dark:border-white/15">
-                  <div>
-                    <p className="font-medium">{t.title}</p>
-                    <p className="text-sm opacity-70">{t.description}</p>
-                  </div>
-                  <button
-                    onClick={() => practice(t.id, t.title, d.lang)}
-                    disabled={starting !== null}
-                    className="shrink-0 rounded-lg bg-foreground px-3 py-1.5 text-sm text-background disabled:opacity-50"
-                  >
-                    {starting === t.id ? "Starting…" : "Practice"}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+      <section>
+        <h2 className="mb-2 font-medium">Words to review</h2>
+        {d.vocab_to_review.length === 0 ? (
+          <p className="text-sm opacity-60">Nothing to review yet.</p>
+        ) : (
+          <ul className="divide-y divide-black/10 rounded-xl border border-black/10 dark:divide-white/15 dark:border-white/15">
+            {d.vocab_to_review.map((v) => (
+              <li key={v.lemma} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                <div>
+                  <span className="font-medium">{v.lemma}</span> {v.cefr && <span className="text-xs opacity-50">{v.cefr}</span>}
+                  {v.meaning && <p className="opacity-70">{v.meaning}</p>}
+                </div>
+                <span className="shrink-0 text-xs opacity-60">
+                  {v.times_misused > 0 ? `${v.times_misused} slip${v.times_misused > 1 ? "s" : ""}` : "heard, not used"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

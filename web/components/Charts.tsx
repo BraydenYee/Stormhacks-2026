@@ -125,7 +125,7 @@ function Tooltip({ tip, width }: { tip: Tip | null; width: number }) {
 
 /* ---------- Difficulty line (single series, y axis in CEFR levels) ---------- */
 
-export function DifficultyLine({ points }: { points: { label: string; value: number; topic: string }[] }) {
+export function DifficultyLine({ points }: { points: { label: string; value: number; detail: string }[] }) {
   const [ref, w] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const iw = w - PAD.l - PAD.r;
@@ -149,7 +149,7 @@ export function DifficultyLine({ points }: { points: { label: string; value: num
       : {
           x: x(hover),
           y: y(points[hover].value),
-          title: `${points[hover].label} · ${points[hover].topic}`,
+          title: `${points[hover].label} · ${points[hover].detail}`,
           rows: [
             {
               label: "difficulty",
@@ -191,7 +191,7 @@ export function DifficultyLine({ points }: { points: { label: string; value: num
 
 /* ---------- Errors per session (stacked columns) ---------- */
 
-export type StackDatum = { label: string; topic: string; segments: Record<string, number> };
+export type StackDatum = { label: string; detail: string; segments: Record<string, number> };
 
 function topRounded(x: number, y: number, w: number, h: number, r: number) {
   r = Math.min(r, h / 2, w / 2);
@@ -216,7 +216,7 @@ export function ErrorStack({ data, keys }: { data: StackDatum[]; keys: { key: st
   const tipFor = (i: number): Tip => ({
     x: PAD.l + band * i + band / 2,
     y: y(totals[i]),
-    title: `${data[i].label} · ${data[i].topic}`,
+    title: `${data[i].label} · ${data[i].detail}`,
     rows: [
       ...keys.filter((k) => data[i].segments[k.key]).map((k) => ({ label: k.label, value: String(data[i].segments[k.key]), color: k.color })),
       ...(totals[i] === 0 ? [{ label: "no mistakes", value: "0", color: "var(--axis)" }] : []),
