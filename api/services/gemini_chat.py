@@ -112,7 +112,9 @@ def main() -> None:
             if language.lower() != native_language.lower():
                 print(f"{native_language}: {native_reply}")
 
-            transferMessage(native_reply, target_reply)
+            transferMessage(target_reply, native_reply)
+
+             
 
             createAndPlayTextToSpeechMessage(target_reply)
 
