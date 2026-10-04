@@ -1,5 +1,6 @@
 """Per-turn learner features. Pure functions — no I/O — so they're easy to test."""
 
+import math
 import re
 
 import numpy as np
@@ -55,6 +56,40 @@ def timing_stats(words: list[dict] | None) -> dict:
     }
 
 
+# A word the recognizer was less than this sure of counts as "unclear". Not calibrated against labelled
+# data yet: tune it once real sessions come with "too easy / too hard" labels.
+UNCLEAR_BELOW = 0.5
+
+
+def confidence_stats(words: list[dict] | None, text: str) -> dict:
+    """Pronunciation clarity from the speech recognizer's per-word confidence.
+
+    This measures how easily a recognizer understood each word, not whether it matched a correct
+    pronunciation. Noise, a poor microphone and accent all lower it too. Returns None values for typed
+    input, which has no audio.
+    """
+    spoken = [w for w in (words or []) if w.get("type", "word") == "word" and w.get("logprob") is not None]
+    if not spoken:
+        return {"clarity": None, "min_word_confidence": None, "unclear_count": 0, "unclear_spans": []}
+
+    probs = [math.exp(min(0.0, w["logprob"])) for w in spoken]  # logprob <= 0, so this is in (0, 1]
+    spans, cursor = [], 0
+    for w, p in zip(spoken, probs):
+        # Locate each word in the transcript, in order, so the UI can underline exactly that stretch.
+        start = text.find(w["text"], cursor)
+        if start == -1:
+            continue
+        cursor = start + len(w["text"])
+        if p < UNCLEAR_BELOW:
+            spans.append([start, cursor])
+    return {
+        "clarity": round(float(np.mean(probs)), 3),
+        "min_word_confidence": round(min(probs), 3),
+        "unclear_count": sum(1 for p in probs if p < UNCLEAR_BELOW),
+        "unclear_spans": spans,
+    }
+
+
 def compute_features(
     text: str,
     analysis: dict,
@@ -79,4 +114,5 @@ def compute_features(
         "estimated_cefr": analysis.get("estimated_cefr"),
         "comprehension_sim": round(comprehension_sim, 3) if comprehension_sim is not None else None,
         **timing_stats(stt_words),
+        **confidence_stats(stt_words, text),
     }

@@ -25,7 +25,6 @@ from api.services.embeddings import embed
 log = logging.getLogger(__name__)
 router = APIRouter()
 
-START_DIFFICULTY = 2.0
 
 
 class CreateUser(BaseModel):
@@ -42,6 +41,7 @@ class CreateSession(BaseModel):
 class Speak(BaseModel):
     text: str
     speed: float = 1.0
+    lang: str | None = None  # target language code, so the voice speaks the right language
 
 
 @router.post("/tts")
@@ -50,7 +50,7 @@ async def speak(body: Speak):
     text = body.text.strip()[:1000]
     if not text:
         raise HTTPException(422, "empty text")
-    audio = await asyncio.to_thread(createTextToSpeechAudio, text, body.speed)
+    audio = await asyncio.to_thread(createTextToSpeechAudio, text, body.speed, body.lang)
     return {"audio_b64": base64.b64encode(audio).decode(), "audio_mime": "audio/mpeg"}
 
 
@@ -116,10 +116,10 @@ async def _past_mistakes(db: AsyncSession, user_id: uuid.UUID, lang: str, emb: l
     return [{"original": m.original, "corrected": m.corrected, "category": m.category} for m in rows]
 
 
-async def _tts(text: str, speed: float) -> str | None:
+async def _tts(text: str, speed: float, lang: str) -> str | None:
     """TTS failure shouldn't lose the turn — the UI falls back to text only."""
     try:
-        return base64.b64encode(await asyncio.to_thread(createTextToSpeechAudio, text, speed)).decode()
+        return base64.b64encode(await asyncio.to_thread(createTextToSpeechAudio, text, speed, lang)).decode()
     except Exception:
         log.exception("TTS failed")
         return None
@@ -162,7 +162,7 @@ async def start_session(body: CreateSession, db: AsyncSession = Depends(get_db))
             raise HTTPException(422, f"unknown level '{body.level}'")
     if not profile:
         # New learner: the level they picked, else config.toml's level, else the built-in default.
-        start = chosen or diff.level_to_difficulty(settings.default_level) or START_DIFFICULTY
+        start = chosen or diff.new_learner_difficulty(settings.default_level)
         profile = LearnerProfile(user_id=user.id, target_lang=body.target_lang, difficulty=start, stats={})
         db.add(profile)
     elif chosen is not None:
@@ -291,7 +291,7 @@ async def post_turn(
     background.add_task(_embed_rows, tutor_turn.id, [m.id for m in mistakes])
 
     # 6. Voice the reply at a speed matching the new difficulty
-    audio_b64 = await _tts(turn.reply, diff.knobs(new_d)["tts_speed"])
+    audio_b64 = await _tts(turn.reply, diff.knobs(new_d)["tts_speed"], session.target_lang)
 
     return {
         "user_turn": {"id": user_turn.id, "text": text, "corrections": analysis["corrections"], "features": features},
@@ -315,10 +315,13 @@ async def _build_summary(db: AsyncSession, session: ConversationSession, user: U
     ).all()
     categories = Counter(m.category for m in mistakes)
     ps = [t.features["performance"]["p"] for t in user_turns if t.features and "performance" in t.features]
+    cl = [t.features["clarity"] for t in user_turns if t.features and t.features.get("clarity") is not None]
     stats = {
         "turns": len(user_turns),
         "words_spoken": sum((t.features or {}).get("word_count", 0) for t in user_turns),
         "avg_performance": round(sum(ps) / len(ps), 3) if ps else None,
+        # Average speech-recognizer confidence over spoken turns; None if every turn was typed.
+        "avg_clarity": round(sum(cl) / len(cl), 3) if cl else None,
         "difficulty_start": session.start_difficulty,
         "difficulty_end": profile.difficulty,
         "errors_by_category": dict(categories),
@@ -381,7 +384,14 @@ async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db))
         "ended": session.ended_at is not None,
         "difficulty": {"value": profile.difficulty, "cefr": diff.cefr_label(profile.difficulty)},
         "turns": [
-            {"id": t.id, "role": t.role, "text": t.text, "translation": t.translation, "corrections": corrections.get(t.id, [])}
+            {
+                "id": t.id,
+                "role": t.role,
+                "text": t.text,
+                "translation": t.translation,
+                "corrections": corrections.get(t.id, []),
+                "unclear_spans": (t.features or {}).get("unclear_spans", []),
+            }
             for t in turns
         ],
     }

@@ -39,6 +39,14 @@ def level_to_difficulty(level: str | None) -> float | None:
     return LEVEL_NAMES.get(level.strip().lower().replace(" ", "-"))
 
 
+START_DIFFICULTY = 2.0  # A2, used when nothing else says where a new learner should start
+
+
+def new_learner_difficulty(default_level: str | None) -> float:
+    """Where a learner with no history starts: the configured level, else the built-in default."""
+    return level_to_difficulty(default_level) or START_DIFFICULTY
+
+
 def clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, x))
 
@@ -63,13 +71,28 @@ def performance(f: dict) -> dict:
 
     target_lang_use = 0.0 if f.get("used_native_language") else 1.0
 
-    p = 0.4 * accuracy + 0.25 * fluency + 0.25 * comprehension + 0.1 * target_lang_use
+    # Pronunciation clarity (speech-recognizer confidence) only exists for spoken turns. Average word
+    # confidence runs from ~0.5 (struggling to be understood) to ~0.9 (clear); typed turns skip it.
+    clarity = f.get("clarity")
+    pronunciation = None if clarity is None else clamp((clarity - 0.5) / 0.4)
+
+    parts = {
+        "accuracy": (0.35, accuracy),
+        "fluency": (0.20, fluency),
+        "comprehension": (0.20, comprehension),
+        "target_lang_use": (0.10, target_lang_use),
+    }
+    if pronunciation is not None:
+        parts["pronunciation"] = (0.15, pronunciation)
+    # Weights are renormalised over the parts present, so typed turns aren't penalised for having no audio.
+    p = sum(w * v for w, v in parts.values()) / sum(w for w, _ in parts.values())
     return {
         "p": round(p, 3),
         "accuracy": round(accuracy, 3),
         "fluency": round(fluency, 3),
         "comprehension": round(comprehension, 3),
         "target_lang_use": target_lang_use,
+        "pronunciation": None if pronunciation is None else round(pronunciation, 3),
     }
 
 

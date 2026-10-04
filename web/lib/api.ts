@@ -4,8 +4,16 @@ export type Correction = { original: string; corrected: string; explanation: str
 export type Vocab = { lemma: string; cefr: string | null; meaning?: string | null };
 export type Difficulty = { value: number; cefr: string };
 
+/** [start, end) character offsets of words the speech recognizer was unsure of. */
+export type Span = [number, number];
+
 export type TurnResult = {
-  user_turn: { id: number; text: string; corrections: Correction[] };
+  user_turn: {
+    id: number;
+    text: string;
+    corrections: Correction[];
+    features: { clarity: number | null; unclear_spans: Span[] };
+  };
   assistant_turn: { id: number; text: string; translation: string | null; new_vocab: Vocab[] };
   difficulty: { before: number; after: number; cefr: string; performance: { p: number } };
   audio_b64: string | null;
@@ -22,7 +30,14 @@ export type SessionState = {
   target_lang: string;
   ended: boolean;
   difficulty: Difficulty;
-  turns: { id: number; role: "user" | "assistant"; text: string; translation: string | null; corrections: Correction[] }[];
+  turns: {
+    id: number;
+    role: "user" | "assistant";
+    text: string;
+    translation: string | null;
+    corrections: Correction[];
+    unclear_spans: Span[];
+  }[];
 };
 
 /** What the shared config.toml / ElevenLabs settings currently resolve to on the server. */
@@ -38,6 +53,7 @@ export type Summary = {
   turns: number;
   words_spoken: number;
   avg_performance: number | null;
+  avg_clarity: number | null;
   difficulty_start: number;
   difficulty_end: number;
   cefr_end: string;
@@ -61,6 +77,8 @@ export type Analytics =
         difficulty_start: number;
         difficulty_end: number;
         errors: Record<string, number>;
+        clarity: number | null; // mean pronunciation clarity over spoken turns, 0–1
+        unclear_words: number;
         ended: boolean;
       }[];
       weak_spots: { label: string; size: number; category: string; examples: { original: string; corrected: string }[] }[];
@@ -88,6 +106,8 @@ const json = (body: unknown): RequestInit => ({
 export const api = {
   createUser: (native_lang: string) => req<{ id: string }>("/users", json({ native_lang })),
   config: () => req<AppConfig>("/config"),
+  level: (userId: string, lang: string) =>
+    req<{ exists: boolean; value: number; cefr: string }>(`/users/${userId}/level?lang=${lang}`),
   startSession: (user_id: string, target_lang: string, level?: string) =>
     req<StartResult>("/sessions", json({ user_id, target_lang, level })),
   getSession: (id: string) => req<SessionState>(`/sessions/${id}`),
@@ -101,8 +121,8 @@ export const api = {
     fd.append("text", text);
     return req<TurnResult>(`/sessions/${id}/turns`, { method: "POST", body: fd });
   },
-  speak: (text: string, speed = 1) =>
-    req<{ audio_b64: string; audio_mime: string }>("/tts", json({ text, speed })),
+  speak: (text: string, lang?: string, speed = 1) =>
+    req<{ audio_b64: string; audio_mime: string }>("/tts", json({ text, speed, lang })),
   endSession: (id: string) => req<Summary>(`/sessions/${id}/end`, { method: "POST" }),
   analytics: (userId: string, lang?: string) =>
     req<Analytics>(`/users/${userId}/analytics${lang ? `?lang=${lang}` : ""}`),

@@ -1,7 +1,9 @@
 import numpy as np
 
 from api.ml import difficulty as diff
-from api.ml.features import compute_features, cosine, timing_stats
+import math
+
+from api.ml.features import compute_features, confidence_stats, cosine, timing_stats
 from api.ml.insights import cluster_mistakes, vocab_review_score
 
 CLEAN = {"corrections": [], "on_topic": True, "used_native_language": False, "vocab_used": [{"lemma": "casa", "cefr": "A1"}]}
@@ -82,6 +84,36 @@ def test_cluster_mistakes_separates_groups():
 def test_vocab_review_ranks_misused_first():
     assert vocab_review_score(5, 4, 3) > vocab_review_score(5, 4, 0)
     assert vocab_review_score(2, 0, 0) > vocab_review_score(5, 4, 0)
+
+
+def _word(text, prob):
+    return {"text": text, "type": "word", "start": 0.0, "end": 0.3, "logprob": math.log(prob)}
+
+
+def test_confidence_stats_marks_unclear_words_by_position():
+    text = "yo quiero una casa"
+    words = [_word("yo", 0.95), _word("quiero", 0.3), _word("una", 0.9), _word("casa", 0.4)]
+    s = confidence_stats(words, text)
+    assert s["unclear_count"] == 2
+    assert [text[a:b] for a, b in s["unclear_spans"]] == ["quiero", "casa"]
+    assert s["min_word_confidence"] == 0.3
+    assert 0.5 < s["clarity"] < 0.7
+
+
+def test_confidence_stats_handles_text_input_and_repeated_words():
+    assert confidence_stats(None, "typed")["clarity"] is None
+    # the same word twice: spans must point at each occurrence, not the first one twice
+    s = confidence_stats([_word("no", 0.9), _word("no", 0.2)], "no no")
+    assert s["unclear_spans"] == [[3, 5]]
+
+
+def test_clear_speech_scores_higher_than_unclear_and_typed_turns_are_not_penalised():
+    base = compute_features("Ayer fui al mercado con mi hermana y compramos muchas frutas", CLEAN, comprehension_sim=0.7)
+    clear = {**base, "clarity": 0.95}
+    unclear = {**base, "clarity": 0.45}
+    assert diff.performance(clear)["p"] > diff.performance(unclear)["p"]
+    typed = diff.performance({**base, "clarity": None})
+    assert typed["pronunciation"] is None and typed["p"] > 0.99
 
 
 def test_cosine_handles_missing():
