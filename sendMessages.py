@@ -5,17 +5,19 @@ def transferMessage(nativeMessage, translatedMessage):
     #Ip = 172.16.175.16
     # Port 5000
     sock = socket(AF_INET, SOCK_STREAM)
-    sock.connect(("127.0.0.1", 5000))
+    sock.connect(("172.16.175.16", 5000))
 
-    sock.sendall(nativeMessage.encode("utf-8"))
+    grove_payload = f"SPEAK:{nativeMessage}\n"
+    arduino_payload = f"ENGLISH:{translatedMessage}\n"
 
-    sock.sendall(translatedMessage.encode("utf-8"))
+    sock.sendall(grove_payload.encode("utf-8"))
+    sock.sendall(arduino_payload.encode("utf-8"))
 
     sock.close()
 
     
 
-transferMessage("Test", "test")
+transferMessage("Hola", "Hello")
 
 
 
