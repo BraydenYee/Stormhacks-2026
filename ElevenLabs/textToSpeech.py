@@ -11,6 +11,13 @@ import tomllib
 CONFIG_PATH = Path(__file__).resolve().parent.parent/"config.toml"
 DEFAULTS = {"language": "English", "level": "intermediate", "model": "gemini-3.8-flash"}
 
+skillDict = {
+    "beginner": 0.75,
+    "intermediate": 0.9,
+    "advanced": 1.05,
+    "native": 1.2
+
+}
 
 languageDict = {
     "afrikaans": "AFR" ,
@@ -102,18 +109,24 @@ def load_config() -> dict:
 def createAndPlayTextToSpeechMessage(text):
     load_dotenv()
     apiKey = os.getenv("ElevenLabsKey")
-        
+
+    config = load_config()
+    
+    lang = languageDict[config["language"].lower()]
+    skill = config["level"]
+
     client = ElevenLabs(api_key=apiKey)
 
     with client.text_to_speech.with_raw_response.convert(
         text=text,
         voice_id="r1KmysJdVYZjJCm4mL3b",
+        language_code="lang",
         voice_settings=VoiceSettings(
         stability=0.0,
         similarity_boost=1.0,
         style=0.0,
         use_speaker_boost=True,
-        speed=1.0  
+        speed=skillDict[skill.lower()]  
     )
         
     ) as response:
@@ -126,14 +139,6 @@ def createAndPlayTextToSpeechMessage(text):
 def main():
     #print(CONFIG_PATH.resolve(), CONFIG_PATH.exists())
     text = startRecording()
-
-    config = load_config()
-    
-    lang = languageDict[config["language"].lower()]
-    skill = config["level"]
-
-    print(lang)
-    print(skill)
 
     print(text)
 
