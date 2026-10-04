@@ -34,6 +34,17 @@ class Reply(BaseModel):
     translation: str
 
 
+LCD_CHARS = 32  # 16x2 character LCD
+
+
+class TranslationGrade(BaseModel):
+    reply: str  # feedback in the target language, spoken aloud
+    translation: str  # the same feedback in the user's primary language
+    verdict: str  # very short result for the LCD, in the user's primary language
+    correct_sentence: str  # in the target language
+    correct_sentence_romanized: str  # Latin letters only, for the LCD
+
+
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
         return dict(DEFAULTS)
@@ -116,7 +127,59 @@ def dictionTest(client,model,text, language, native_language, level):
     
 
 
+def translationTest(client, model, text, language, native_language, level):
+    # ask_gemini gives a sentence in the target language plus its translation; the user sees the translation.
+    reply = ask_gemini(
+        client, model, "Say one short, everyday sentence for me to practice translating.",
+        language, native_language, level,
+    )
+    target_sentence = reply.reply  # in the language being learned
+    native_sentence = reply.translation  # in the user's primary language
+
+    print(f"Please translate into {language}: {native_sentence}")
+    # Target screen gets an instruction, not the answer; native screen shows what to translate.
+    transferMessage(f"Say it in {language}...", unidecode(f"Translate: {native_sentence}"))
+    userAttempt = startRecording()
+    print(f"You said: {userAttempt}")
+
+    # Translations can be worded many ways, so let Gemini judge instead of matching word by word.
+    responseText = (
+        f"I was asked to translate \"{native_sentence}\" into {language}. "
+        f"One correct translation is \"{target_sentence}\". I said: \"{userAttempt}\"."
+    )
+    config = types.GenerateContentConfig(
+        system_instruction=(
+            f"You grade a {level} learner's spoken translation into {language}. Accept any natural, correct "
+            "translation and ignore punctuation, since the answer comes from speech recognition.\n"
+            f"reply: in {language}, suited to a {level} speaker, say whether they got it right, point out "
+            "each specific mistake, and give the corrected sentence.\n"
+            f"translation: reply translated into {native_language}.\n"
+            f"verdict: at most {LCD_CHARS} characters in {native_language}, e.g. \"Correct!\" or the main "
+            "mistake in a few words.\n"
+            f"correct_sentence: a correct {language} translation, keeping the learner's wording if it was close.\n"
+            "correct_sentence_romanized: correct_sentence in plain Latin letters only (e.g. romaji, or pinyin "
+            "without tone marks), using the correct reading of every word."
+        ),
+        response_mime_type="application/json",
+        response_schema=TranslationGrade,
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+    )
+    grade = client.models.generate_content(model=model, contents=responseText, config=config).parsed
+    print(f"\n{language}: {grade.reply}")
+    print(f"{native_language}: {grade.translation}")
+
+    # Target screen: the correct sentence. Native screen: a short verdict.
+    transferMessage(unidecode(grade.correct_sentence_romanized), unidecode(grade.verdict)[:LCD_CHARS])
+    createAndPlayTextToSpeechMessage(grade.reply)
+
+
 def detectSpecialRequests(client,model,text, language, native_language, level):
+    translationTriggerWords = ["translate", "translation"]
+    for item in translationTriggerWords:
+        if(item in text.lower()):
+            translationTest(client, model, text, language, native_language, level)
+            return True
+
     dictionTriggerWords = ["pronunciation", "articulation", "inflection", "utterences", "diction"]
     for item in dictionTriggerWords:
         if(item in text.lower()):
