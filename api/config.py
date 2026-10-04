@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     default_language: str = TOML["language"]
     default_level: str = TOML["level"]
 
-    # Voice, voice settings and models live in api/services/elevenlabs/.
+    # Voice, voice settings and models live in api/services/Elevenlabs/.
     elevenlabs_api_key: str = ""
 
     cors_origins: list[str] = ["http://localhost:3000"]
