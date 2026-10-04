@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from unidecode import unidecode
 
 # textToSpeech.py imports its sibling modules by bare name, so its folder must be on the path.
-sys.path.insert(0, str(Path(__file__).parent / "elevenlabs"))
+sys.path.insert(0, str(Path(__file__).parent / "Elevenlabs"))
 from speechToText import startRecording  # noqa: E402
 from textToSpeech import createAndPlayTextToSpeechMessage  # noqa: E402
 from sendMessages import transferMessage  # noqa: E402
@@ -25,6 +25,8 @@ DEFAULTS = {
     "level": "intermediate",
     "model": "gemini-3.8-flash",
 }
+
+
 
 
 class Reply(BaseModel):
@@ -57,6 +59,62 @@ def ask_gemini(
     )
     response = client.models.generate_content(model=model, contents=text, config=config)
     return response.parsed
+
+# I do not like having to pass all these args into each function but I dont want to deal with making it better. 2 hr left baby
+def dictionTest(client,model,text, language, native_language, level):
+    reply = ask_gemini(client, model, text, language, native_language, level)
+    target_reply = reply.reply  # in the language being learned
+    native_reply = reply.translation  # in the user's primary language
+
+    print("Please repeat the message: " + target_reply)
+    createAndPlayTextToSpeechMessage(target_reply)
+    userAttempt = startRecording()
+
+
+    fillerWords = ["uh", "um", "bleh", "twah", "bleh"]
+    targetSlices = target_reply.split()
+    attemptSlices = userAttempt.split()
+
+    #print(targetSlices)
+    #print(attemptSlices)
+
+    #Clearing out any punctuation so we are just testing if thier words can be understood
+    for item in targetSlices:
+        item = item.replace(",", "").replace(".", "").replace("!", "").replace("?", "")
+    for item in attemptSlices:
+        item = item.replace(",", "").replace(".", "").replace("!", "").replace("?", "")
+
+    targetIterator = 0
+    attemptIterator = 0
+    correct=0
+    total = len(targetSlices)
+    incorrectWords = []
+    while(targetIterator < len(targetSlices) and attemptIterator < len(attemptSlices)):
+        while(attemptSlices[attemptIterator] in fillerWords):
+            attemptIterator+=1
+        if(targetSlices[targetIterator].lower() != attemptSlices[attemptIterator].lower()):
+            incorrectWords.append(targetSlices[targetIterator])
+        else:
+            correct+=1
+        targetIterator+=1
+        attemptIterator+=1
+
+    print("Percentage: " + str((float(correct)/float(total))))
+    #print(incorrectWords)
+
+
+    
+
+
+def detectSpecialRequests(client,model,text, language, native_language, level):
+    dictionTriggerWords = ["pronunciation", "articulation", "inflection", "utterences", "diction"]
+    for item in dictionTriggerWords:
+        if(item in text.lower()):
+            #print("Requested Diction Test")
+            dictionTest(client,model,text,language, native_language, level)
+            return True
+
+    return False
 
 
 def main() -> None:
@@ -105,6 +163,8 @@ def main() -> None:
         if not text:
             print("Recording...")
             text = startRecording()
+            if(detectSpecialRequests(client, model, text, language, native_language, level)):
+                continue
             print(f"You said: {text}")
         if text:
             reply = ask_gemini(client, model, text, language, native_language, level)
@@ -116,8 +176,6 @@ def main() -> None:
 
             transferMessage(unidecode(target_reply), native_reply)
             #print(target_reply)
-             
-
             createAndPlayTextToSpeechMessage(target_reply)
 
 
