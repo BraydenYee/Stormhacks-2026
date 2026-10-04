@@ -20,8 +20,8 @@ analyses each learner turn, and every turn is embedded (pgvector) to drive adapt
 
 | File | Used for | Run on its own |
 |---|---|---|
-| `api/services/elevenlabs/speechToText.py` | `getTranscript()` turns the browser's recording into text plus word timings | `python -m api.services.elevenlabs.speechToText` |
-| `api/services/elevenlabs/textToSpeech.py` | `createTextToSpeechAudio()` voices every tutor reply (voice ID, voice settings, model all set here) | `python -m api.services.elevenlabs.textToSpeech` |
+| `api/services/Elevenlabs/speechToText.py` | `getTranscript()` turns the browser's recording into text plus word timings | `python -m api.services.Elevenlabs.speechToText` |
+| `api/services/Elevenlabs/textToSpeech.py` | `createTextToSpeechAudio()` voices every tutor reply (voice ID, voice settings, model all set here) | `python -m api.services.Elevenlabs.textToSpeech` |
 | `api/services/gemini_chat.py` | `build_system_instruction()` opens the tutor prompt; `generation_config()` and `load_config()` are shared | `python -m api.services.gemini_chat` |
 | `config.toml` | `model`, `language` (landing-page default), `level` (where new learners start) | – |
 
