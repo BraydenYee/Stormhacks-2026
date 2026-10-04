@@ -1,4 +1,3 @@
-import argparse
 import os
 import sys
 import tomllib
@@ -7,15 +6,27 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
 
 # textToSpeech.py imports its sibling modules by bare name, so its folder must be on the path.
 sys.path.insert(0, str(Path(__file__).with_name("ElevenLabs")))
+from speechToText import startRecording  # noqa: E402
 from textToSpeech import createAndPlayTextToSpeechMessage  # noqa: E402
 
 load_dotenv()
 
 CONFIG_PATH = Path(__file__).with_name("config.toml")
-DEFAULTS = {"language": "English", "level": "intermediate", "model": "gemini-3.8-flash"}
+DEFAULTS = {
+    "language": "English",
+    "native_language": "English",
+    "level": "intermediate",
+    "model": "gemini-3.8-flash",
+}
+
+
+class Reply(BaseModel):
+    reply: str
+    translation: str
 
 
 def load_config() -> dict:
@@ -28,16 +39,21 @@ def load_config() -> dict:
             sys.exit(f"Error: invalid {CONFIG_PATH.name}: {e}")
 
 
-def ask_gemini(client: genai.Client, model: str, text: str, language: str, level: str) -> str:
+def ask_gemini(
+    client: genai.Client, model: str, text: str, language: str, native_language: str, level: str
+) -> Reply:
     config = types.GenerateContentConfig(
         system_instruction=(
-            f"Always respond in {language}, regardless of the language the user writes in. "
-            f"Use vocabulary and grammar suited to a {level} speaker of {language}."
+            f"Always write your reply in {language}, regardless of the language the user writes in. "
+            f"Use vocabulary and grammar suited to a {level} speaker of {language}. "
+            f"Also provide a translation of your reply into {native_language}."
         ),
+        response_mime_type="application/json",
+        response_schema=Reply,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
     response = client.models.generate_content(model=model, contents=text, config=config)
-    return response.text
+    return response.parsed
 
 
 def main() -> None:
@@ -46,32 +62,18 @@ def main() -> None:
 
     config = load_config()
 
-    parser = argparse.ArgumentParser(description="Chat with Gemini.")
-    parser.add_argument(
-        "-l", "--lang", default=config["language"], help="language for responses (overrides config)"
-    )
-    parser.add_argument(
-        "--level", default=config["level"], help="language level, e.g. beginner (overrides config)"
-    )
-    parser.add_argument("text", nargs="*", help="one-shot prompt; omit for interactive chat")
-    args = parser.parse_args()
-
     if not os.environ.get("GEMINI_API_KEY"):
         sys.exit("Error: set GEMINI_API_KEY in .env first.")
 
     client = genai.Client()  # reads GEMINI_API_KEY from .env
     model = config["model"]
-    language = args.lang
-    level = args.level
-
-    if args.text:
-        reply = ask_gemini(client, model, " ".join(args.text), language, level)
-        print(reply)
-        createAndPlayTextToSpeechMessage(reply)
-        return
+    language = config["language"]
+    native_language = config["native_language"]
+    level = config["level"]
 
     print(
         f"Chatting with {model} in {language} ({level}). "
+        "Press Enter on an empty line to speak, or type a message.\n"
         "Type '/lang <language>' or '/level <level>' to switch, 'exit' to quit."
     )
     while True:
@@ -97,10 +99,18 @@ def main() -> None:
             else:
                 print(f"Current level: {level}. Usage: /level <level>")
             continue
+        if not text:
+            print("Recording...")
+            text = startRecording()
+            print(f"You said: {text}")
         if text:
-            reply = ask_gemini(client, model, text, language, level)
-            print(f"\nGemini: {reply}")
-            createAndPlayTextToSpeechMessage(reply)
+            reply = ask_gemini(client, model, text, language, native_language, level)
+            target_reply = reply.reply  # in the language being learned
+            native_reply = reply.translation  # in the user's primary language
+            print(f"\n{language}: {target_reply}")
+            if language.lower() != native_language.lower():
+                print(f"{native_language}: {native_reply}")
+            createAndPlayTextToSpeechMessage(target_reply)
 
 
 if __name__ == "__main__":
