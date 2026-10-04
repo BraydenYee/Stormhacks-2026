@@ -12,6 +12,7 @@ from pydantic import BaseModel
 sys.path.insert(0, str(Path(__file__).with_name("ElevenLabs")))
 from speechToText import startRecording  # noqa: E402
 from textToSpeech import createAndPlayTextToSpeechMessage  # noqa: E402
+import sendMessages
 
 load_dotenv()
 
@@ -110,6 +111,9 @@ def main() -> None:
             print(f"\n{language}: {target_reply}")
             if language.lower() != native_language.lower():
                 print(f"{native_language}: {native_reply}")
+
+            sendMessages(native_reply, target_reply)
+
             createAndPlayTextToSpeechMessage(target_reply)
 
 

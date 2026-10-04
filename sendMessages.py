@@ -15,9 +15,6 @@ def transferMessage(nativeMessage, translatedMessage):
 
     sock.close()
 
-    
-
-transferMessage("Hola", "Hello")
 
 
 
