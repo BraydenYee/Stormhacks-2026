@@ -21,6 +21,7 @@ from api.services import llm
 from api.services.voice.stt import getTranscript
 from api.services.voice.tts import createTextToSpeechAudio
 from api.services.embeddings import embed
+from api.services.elevenlabs.sendMessages import transferMessage
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -294,6 +295,10 @@ async def post_turn(
 
     # 6. Voice the reply at a speed matching the new difficulty
     audio_b64 = await _tts(turn.reply, diff.knobs(new_d)["tts_speed"], session.target_lang)
+    try:
+        transferMessage(turn.reply, turn.reply_translation)
+    except Exception as e:
+        print(f"Hardware socket failed: {e}")
 
     return {
         "user_turn": {"id": user_turn.id, "text": text, "corrections": analysis["corrections"], "features": features},

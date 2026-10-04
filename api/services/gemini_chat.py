@@ -207,9 +207,10 @@ def main() -> None:
 
     print(
         f"Chatting with {model} in {language} ({level}). "
-        "Press Enter on an empty line to speak, or type a message.\n"
+        "Press Enter to use the D5 button for voice recording.\n"
         "Type '/lang <language>' or '/level <level>' to switch, 'exit' to quit."
     )
+
     while True:
         try:
             text = input("\nYou: ").strip()
@@ -234,7 +235,6 @@ def main() -> None:
                 print(f"Current level: {level}. Usage: /level <level>")
             continue
         if not text:
-            print("Recording...")
             text = startRecording()
             if(detectSpecialRequests(client, model, text, language, native_language, level)):
                 continue
