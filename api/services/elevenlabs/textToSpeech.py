@@ -6,7 +6,7 @@ from elevenlabs import VoiceSettings
 from api.config import settings
 from api.services.elevenlabs.speechToText import startRecording
 
-VOICE_ID = "r1KmysJdVYZjJCm4mL3b"
+VOICE_ID = "Vu9gRjkR23ZG8EWrSmnj"
 # Per-language voices. Languages not listed use VOICE_ID.
 # "zh": VOICE_ID sounds Cantonese, so Mandarin uses ElevenLabs' stock multilingual voice "Rachel" as a stand-in
 # (spoken as Mandarin because the language code is passed). Replace it with a native Mandarin voice id from
@@ -45,8 +45,16 @@ def createTextToSpeechAudio(text, speed=1.0, language=None):
         return b"".join(response.data)
 
 
+# Voice speed per language level, for the CLI. The web app passes its own speed.
+SPEED_BY_LEVEL = {"beginner": 0.75, "intermediate": 0.9, "advanced": 1.05, "native": 1.2}
+
+
 def createAndPlayTextToSpeechMessage(text):
-    play(createTextToSpeechAudio(text))
+    # Imported here: api.config imports gemini_chat, which imports this module.
+    from api.services.gemini_chat import load_config
+
+    level = str(load_config()["level"]).lower()
+    play(createTextToSpeechAudio(text, speed=SPEED_BY_LEVEL.get(level, 1.0)))
 
 
 def main():

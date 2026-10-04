@@ -7,12 +7,23 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
 
 load_dotenv()
 
 # config.toml sits at the project root, shared by this CLI and the web app (api/config.py).
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.toml"
-DEFAULTS = {"language": "English", "level": "intermediate", "model": "gemini-3.8-flash"}
+DEFAULTS = {
+    "language": "English",
+    "native_language": "English",
+    "level": "intermediate",
+    "model": "gemini-3.8-flash",
+}
+
+
+class Reply(BaseModel):
+    reply: str
+    translation: str
 
 
 def load_config() -> dict:
@@ -41,10 +52,29 @@ def generation_config(**kwargs) -> types.GenerateContentConfig:
     )
 
 
-def ask_gemini(client: genai.Client, model: str, text: str, language: str, level: str) -> str:
-    config = generation_config(system_instruction=build_system_instruction(language, level))
+def ask_gemini(
+    client: genai.Client, model: str, text: str, language: str, native_language: str, level: str
+) -> Reply:
+    config = generation_config(
+        system_instruction=(
+            build_system_instruction(language, level)
+            + f" Also provide a translation of your reply into {native_language}."
+        ),
+        response_mime_type="application/json",
+        response_schema=Reply,
+    )
     response = client.models.generate_content(model=model, contents=text, config=config)
-    return response.text
+    return response.parsed
+
+
+def show_reply(reply: Reply, language: str, native_language: str) -> None:
+    # Imported here: it needs the optional ElevenLabs/sounddevice setup, and api.config imports this module.
+    from api.services.elevenlabs.textToSpeech import createAndPlayTextToSpeechMessage
+
+    print(f"\n{language}: {reply.reply}")
+    if language.lower() != native_language.lower():
+        print(f"{native_language}: {reply.translation}")
+    createAndPlayTextToSpeechMessage(reply.reply)
 
 
 def main() -> None:
@@ -69,14 +99,16 @@ def main() -> None:
     client = genai.Client()  # reads GEMINI_API_KEY from .env
     model = config["model"]
     language = args.lang
+    native_language = config["native_language"]
     level = args.level
 
     if args.text:
-        print(ask_gemini(client, model, " ".join(args.text), language, level))
+        show_reply(ask_gemini(client, model, " ".join(args.text), language, native_language, level), language, native_language)
         return
 
     print(
         f"Chatting with {model} in {language} ({level}). "
+        "Press Enter on an empty line to speak, or type a message. "
         "Type '/lang <language>' or '/level <level>' to switch, 'exit' to quit."
     )
     while True:
@@ -102,8 +134,16 @@ def main() -> None:
             else:
                 print(f"Current level: {level}. Usage: /level <level>")
             continue
-        if text:
-            print(f"\nGemini: {ask_gemini(client, model, text, language, level)}")
+        if not text:
+            from api.services.elevenlabs.speechToText import startRecording
+
+            print("Recording...")
+            text = startRecording()
+            print(f"You said: {text}")
+        try:
+            show_reply(ask_gemini(client, model, text, language, native_language, level), language, native_language)
+        except Exception as e:
+            print(f"Error: {e}")
 
 
 if __name__ == "__main__":
