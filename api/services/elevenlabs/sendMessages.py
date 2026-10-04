@@ -7,6 +7,9 @@ def transferMessage(nativeMessage, translatedMessage):
     sock = socket(AF_INET, SOCK_STREAM)
     sock.connect(("172.16.175.16", 5000))
 
+    #print(nativeMessage)
+    #print(translatedMessage)
+
     grove_payload = f"SPEAK:{nativeMessage}\n"
     arduino_payload = f"ENGLISH:{translatedMessage}\n"
 
