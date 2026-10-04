@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+# textToSpeech.py imports its sibling modules by bare name, so its folder must be on the path.
+sys.path.insert(0, str(Path(__file__).with_name("ElevenLabs")))
+from textToSpeech import createAndPlayTextToSpeechMessage  # noqa: E402
+
 load_dotenv()
 
 CONFIG_PATH = Path(__file__).with_name("config.toml")
@@ -61,7 +65,9 @@ def main() -> None:
     level = args.level
 
     if args.text:
-        print(ask_gemini(client, model, " ".join(args.text), language, level))
+        reply = ask_gemini(client, model, " ".join(args.text), language, level)
+        print(reply)
+        createAndPlayTextToSpeechMessage(reply)
         return
 
     print(
@@ -92,7 +98,9 @@ def main() -> None:
                 print(f"Current level: {level}. Usage: /level <level>")
             continue
         if text:
-            print(f"\nGemini: {ask_gemini(client, model, text, language, level)}")
+            reply = ask_gemini(client, model, text, language, level)
+            print(f"\nGemini: {reply}")
+            createAndPlayTextToSpeechMessage(reply)
 
 
 if __name__ == "__main__":
