@@ -146,14 +146,21 @@ def getMicrophoneRecording():
     def callback(inData, frames, time, status):
             if status:
                 print(status)
+            #print(frames)
+            #print(inData)
             chunks.append(inData.copy())
     def handle_signal(signum, frame):
         #if(not stopEvent.is_set):
         stopEvent.set()
 
     signal.signal(signal.SIGINT, handle_signal)
+
+    #print("Waiting on the first stop event")
+    #stopEvent.wait()
+    print("Recording")
+    stopEvent.clear()
     
-    with InputStream(samplerate=fs, channels=2, dtype="int16", callback=callback) as stream:
+    with InputStream(samplerate=fs, channels=2, dtype="int16", callback=callback, blocksize=1024) as stream:
         stopEvent.wait()
     #print(i)
     #sys.exit(0)
