@@ -192,7 +192,8 @@ def createAndPlayTextToSpeechMessage(text):
     
     lang = languageDict[config["language"].lower()]
     skill = config["level"]
-
+    #print(skill)
+    #print(skillDict["advanced"])
     client = ElevenLabs(api_key=apiKey)
 
     with client.text_to_speech.with_raw_response.convert(

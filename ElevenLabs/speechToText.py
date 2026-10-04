@@ -5,11 +5,14 @@ from elevenlabs.play import play
 from dotenv import load_dotenv
 import wave
 import sounddevice as sd
+from sounddevice import InputStream
 import numpy as np
 from io import BytesIO
 from elevenlabs import VoiceSettings
 from pathlib import Path
 import tomllib
+import threading
+import signal
 
 
 
@@ -126,15 +129,37 @@ def getTextFromSpeech(buffer):
     if(text == ""):
         return "Something has gone wrong with the system. Please Try Again"
 
-    print(text)
+    #print(text)
     return text
 
 
 def getMicrophoneRecording():
     duration = 10
     fs = 48000
-    recording = (sd.rec(int(duration * fs), samplerate=fs, channels=2, dtype="int16"))
-    sd.wait()
+
+    
+
+    chunks = []
+    #for i in range(0, 2):
+    stopEvent = threading.Event()
+
+    def callback(inData, frames, time, status):
+            if status:
+                print(status)
+            chunks.append(inData.copy())
+    def handle_signal(signum, frame):
+        #if(not stopEvent.is_set):
+        stopEvent.set()
+
+    signal.signal(signal.SIGINT, handle_signal)
+    
+    with InputStream(samplerate=fs, channels=2, dtype="int16", callback=callback) as stream:
+        stopEvent.wait()
+    #print(i)
+    #sys.exit(0)
+    recording = np.concatenate(chunks)
+    #recording = (sd.rec(int(duration * fs), samplerate=fs, channels=2, dtype="int16"))
+    #sd.wait()
 
     # Temporary Code So I done need to re record a message every time I test out the api
     #recording = None
