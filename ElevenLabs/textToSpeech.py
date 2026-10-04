@@ -198,6 +198,7 @@ def createAndPlayTextToSpeechMessage(text):
     with client.text_to_speech.with_raw_response.convert(
         text=text,
         voice_id="Vu9gRjkR23ZG8EWrSmnj",
+        model_id="eleven_v4",
         #voice_id="r1KmysJdVYZjJCm4mL3b",
         #language_code=lang.lower(),
         voice_settings=VoiceSettings(
