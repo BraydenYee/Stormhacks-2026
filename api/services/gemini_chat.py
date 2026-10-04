@@ -9,7 +9,7 @@ from google.genai import types
 from pydantic import BaseModel
 
 # textToSpeech.py imports its sibling modules by bare name, so its folder must be on the path.
-sys.path.insert(0, str(Path(__file__).parent / "elevenlabs"))
+sys.path.insert(0, str(Path(__file__).parent / "Elevenlabs"))
 from speechToText import startRecording  # noqa: E402
 from textToSpeech import createAndPlayTextToSpeechMessage  # noqa: E402
 from sendMessages import transferMessage  # noqa: E402
