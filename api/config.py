@@ -1,12 +1,22 @@
+import tomllib
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from api.services.gemini_chat import load_config
-
 ROOT = Path(__file__).resolve().parent.parent
 
-# config.toml (model, language, level), shared with the gemini_chat.py CLI and loaded by its loader.
+DEFAULTS = {"language": "English", "level": "intermediate", "model": "gemini-3.8-flash"}
+
+
+def load_config() -> dict:
+    # config.toml (model, language, level) at the project root; missing file falls back to DEFAULTS.
+    path = ROOT / "config.toml"
+    if not path.exists():
+        return dict(DEFAULTS)
+    with path.open("rb") as f:
+        return {**DEFAULTS, **tomllib.load(f)}
+
+
 TOML = load_config()
 
 

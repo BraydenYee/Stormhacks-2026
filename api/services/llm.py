@@ -10,9 +10,23 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 from api.config import settings
-from api.services.gemini_chat import build_system_instruction, generation_config
 
 log = logging.getLogger(__name__)
+
+
+def build_system_instruction(language: str, level: str) -> str:
+    return (
+        f"Always respond in {language}, regardless of the language the user writes in. "
+        f"Use vocabulary and grammar suited to a {level} speaker of {language}."
+    )
+
+
+def generation_config(**kwargs) -> types.GenerateContentConfig:
+    # Automatic function calling is off because no tools are used.
+    return types.GenerateContentConfig(
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        **kwargs,
+    )
 
 LANGUAGES = {
     "es": "Spanish",
@@ -77,7 +91,7 @@ class TutorTurn(BaseModel):
 
 def system_prompt(target: str, native: str, k: dict, past_mistakes: list[dict]) -> str:
     lines = [
-        # Language and level rule from gemini_chat.py; the rest adds the tutoring behaviour.
+        # Language and level rule; the rest adds the tutoring behaviour.
         build_system_instruction(LANGUAGES.get(target, target), k["cefr"]),
         "That applies to your spoken `reply`. Write every explanation, translation and word meaning "
         f"in the learner's native language, {LANGUAGES.get(native, native)}.",
