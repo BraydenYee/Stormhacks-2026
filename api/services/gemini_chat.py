@@ -8,10 +8,15 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
+# textToSpeech.py imports its sibling modules by bare name, so its folder must be on the path.
+sys.path.insert(0, str(Path(__file__).with_name("ElevenLabs")))
+from speechToText import startRecording  # noqa: E402
+from textToSpeech import createAndPlayTextToSpeechMessage  # noqa: E402
+import sendMessages
+
 load_dotenv()
 
-# config.toml sits at the project root, shared by this CLI and the web app (api/config.py).
-CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.toml"
+CONFIG_PATH = Path(__file__).with_name("config.toml")
 DEFAULTS = {
     "language": "English",
     "native_language": "English",
@@ -35,42 +40,24 @@ def load_config() -> dict:
             sys.exit(f"Error: invalid {CONFIG_PATH.name}: {e}")
 
 
-def build_system_instruction(language: str, level: str) -> str:
-    # The web app's tutor prompt (api/services/llm.py) starts with this same instruction.
-    return (
-        f"Always respond in {language}, regardless of the language the user writes in. "
-        f"Use vocabulary and grammar suited to a {level} speaker of {language}."
-    )
-
-
-def generation_config(**kwargs) -> types.GenerateContentConfig:
-    # Shared by the CLI and the web app; automatic function calling is off because no tools are used.
-    return types.GenerateContentConfig(
-        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-        **kwargs,
-    )
-
-
 def ask_gemini(
     client: genai.Client, model: str, text: str, language: str, native_language: str, level: str
 ) -> Reply:
-    config = generation_config(
+    config = types.GenerateContentConfig(
         system_instruction=(
-            build_system_instruction(language, level)
-            + f" Also provide a translation of your reply into {native_language}."
+            f"Always write your reply in {language}, regardless of the language the user writes in. "
+            f"Use vocabulary and grammar suited to a {level} speaker of {language}. "
+            f"Also provide a translation of your reply into {native_language}."
         ),
         response_mime_type="application/json",
         response_schema=Reply,
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
     response = client.models.generate_content(model=model, contents=text, config=config)
     return response.parsed
 
 
 def main() -> None:
-    # Imported here: the audio modules need sounddevice/ElevenLabs, and api.config imports this module.
-    from api.services.elevenlabs.speechToText import startRecording
-    from api.services.elevenlabs.textToSpeech import createAndPlayTextToSpeechMessage
-
     # Windows consoles default to cp1252, which can't print most non-Latin scripts.
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -124,6 +111,9 @@ def main() -> None:
             print(f"\n{language}: {target_reply}")
             if language.lower() != native_language.lower():
                 print(f"{native_language}: {native_reply}")
+
+            sendMessages(native_reply, target_reply)
+
             createAndPlayTextToSpeechMessage(target_reply)
 
 
