@@ -99,6 +99,16 @@ def dictionTest(client,model,text, language, native_language, level):
         targetIterator+=1
         attemptIterator+=1
 
+    responseText = "The user got " + str((float(correct)/float(total))*100) + "percent of the words correct and they got these words incorrect: "
+    for item in incorrectWords:
+        responseText + item + ", "
+    responseText + "Please give them some appropriate guidance and critiques for thier score mentioning the words they struggled with."
+    reply = ask_gemini(client, model, responseText, language, native_language, level)
+    target_reply_two = reply.reply  # in the language being learned
+    native_reply_two = reply.translation
+    createAndPlayTextToSpeechMessage(native_reply_two)
+
+
     print("Percentage: " + str((float(correct)/float(total))))
     #print(incorrectWords)
 
