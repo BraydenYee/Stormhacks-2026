@@ -8,6 +8,8 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
+from unidecode import unidecode
+
 # textToSpeech.py imports its sibling modules by bare name, so its folder must be on the path.
 sys.path.insert(0, str(Path(__file__).parent / "elevenlabs"))
 from speechToText import startRecording  # noqa: E402
@@ -112,8 +114,8 @@ def main() -> None:
             if language.lower() != native_language.lower():
                 print(f"{native_language}: {native_reply}")
 
-            transferMessage(target_reply, native_reply)
-
+            transferMessage(unidecode(target_reply), native_reply)
+            #print(target_reply)
              
 
             createAndPlayTextToSpeechMessage(target_reply)
