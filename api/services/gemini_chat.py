@@ -9,14 +9,14 @@ from google.genai import types
 from pydantic import BaseModel
 
 # textToSpeech.py imports its sibling modules by bare name, so its folder must be on the path.
-sys.path.insert(0, str(Path(__file__).with_name("ElevenLabs")))
+sys.path.insert(0, str(Path(__file__).parent / "elevenlabs"))
 from speechToText import startRecording  # noqa: E402
 from textToSpeech import createAndPlayTextToSpeechMessage  # noqa: E402
-import sendMessages
+from sendMessages import transferMessage  # noqa: E402
 
 load_dotenv()
 
-CONFIG_PATH = Path(__file__).with_name("config.toml")
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.toml"
 DEFAULTS = {
     "language": "English",
     "native_language": "English",
@@ -112,7 +112,7 @@ def main() -> None:
             if language.lower() != native_language.lower():
                 print(f"{native_language}: {native_reply}")
 
-            sendMessages(native_reply, target_reply)
+            transferMessage(native_reply, target_reply)
 
             createAndPlayTextToSpeechMessage(target_reply)
 

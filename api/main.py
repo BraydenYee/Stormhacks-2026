@@ -10,7 +10,7 @@ from google.genai import errors as genai_errors
 from api import db as dbmod
 from api.config import settings
 from api.routers import analytics, sessions
-from api.services.elevenlabs import speechToText, textToSpeech
+from api.services.voice import stt, tts
 from api.services.llm import LANGUAGES, RETRYABLE_CODES
 
 log = logging.getLogger("api")
@@ -74,9 +74,9 @@ async def app_config():
         "level": settings.default_level or None,
         "gemini_model": settings.gemini_model,
         "elevenlabs": {
-            "voice_id": textToSpeech.VOICE_ID,
-            "stt_model": speechToText.MODEL_ID,
-            "tts_model": textToSpeech.MODEL_ID,
+            "voice_id": tts.VOICE_ID,
+            "stt_model": stt.MODEL_ID,
+            "tts_model": tts.MODEL_ID,
         },
     }
 

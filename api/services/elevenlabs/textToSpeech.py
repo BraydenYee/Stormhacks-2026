@@ -184,6 +184,21 @@ def load_config() -> dict:
         except tomllib.TOMLDecodeError as e:
             sys.exit(f"Error: invalid {CONFIG_PATH.name}: {e}")
 
+# ISO 639-1 codes, so ElevenLabs speaks the chosen language instead of guessing it from the text
+# (which is how Mandarin text can come out sounding Cantonese). Languages not listed are auto-detected.
+LANGUAGE_CODES = {
+    "mandarin chinese": "zh",
+    "japanese": "ja",
+    "korean": "ko",
+    "spanish": "es",
+    "french": "fr",
+    "german": "de",
+    "italian": "it",
+    "portuguese": "pt",
+    "english": "en",
+}
+
+
 def createAndPlayTextToSpeechMessage(text):
     load_dotenv()
     apiKey = os.getenv("ElevenLabsKey")
@@ -201,7 +216,7 @@ def createAndPlayTextToSpeechMessage(text):
         voice_id="Vu9gRjkR23ZG8EWrSmnj",
         model_id="eleven_v4",
         #voice_id="r1KmysJdVYZjJCm4mL3b",
-        #language_code=lang.lower(),
+        language_code=LANGUAGE_CODES.get(config["language"].lower()),
         voice_settings=VoiceSettings(
             stability=0.0,
             similarity_boost=1.0,

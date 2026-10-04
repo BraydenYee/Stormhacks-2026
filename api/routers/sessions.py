@@ -18,8 +18,8 @@ from api.ml.features import CEFR_TO_NUM, compute_features, cosine
 from api.models import ConversationSession, LearnerProfile, Mistake, Turn, User, Vocab
 from api.recs import vocab_to_review
 from api.services import llm
-from api.services.elevenlabs.speechToText import getTranscript
-from api.services.elevenlabs.textToSpeech import createTextToSpeechAudio
+from api.services.voice.stt import getTranscript
+from api.services.voice.tts import createTextToSpeechAudio
 from api.services.embeddings import embed
 
 log = logging.getLogger(__name__)
