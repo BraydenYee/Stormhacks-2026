@@ -1,7 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import type { Correction } from "@/lib/api";
+import { useState, type ReactNode } from "react";
+import type { Correction, Span } from "@/lib/api";
+
+/** Underlines the stretches of a spoken message that the speech recognizer was unsure of. */
+function Highlighted({ text, spans }: { text: string; spans?: Span[] }) {
+  if (!spans?.length) return <>{text}</>;
+  const parts: ReactNode[] = [];
+  let pos = 0;
+  spans.forEach(([start, end], i) => {
+    if (start < pos) return;
+    parts.push(text.slice(pos, start));
+    parts.push(
+      <span key={i} title="Hard to make out" className="underline decoration-amber-300 decoration-dotted decoration-2 underline-offset-4">
+        {text.slice(start, end)}
+      </span>,
+    );
+    pos = end;
+  });
+  parts.push(text.slice(pos));
+  return <>{parts}</>;
+}
 
 export type Message = {
   id: number | string;
@@ -9,6 +28,8 @@ export type Message = {
   text: string;
   translation?: string | null;
   corrections?: Correction[];
+  /** Character ranges the speech recognizer was unsure of (spoken learner messages only). */
+  unclear_spans?: Span[];
   /** Cached TTS audio for tutor lines; fetched on demand when missing. */
   audio?: { b64: string; mime: string } | null;
 };
@@ -23,7 +44,9 @@ function Bubble({ m, onPlay, loading }: { m: Message; onPlay?: (m: Message) => v
           mine ? "bg-blue-600 text-white" : "bg-black/5 dark:bg-white/10"
         }`}
       >
-        <p>{m.text}</p>
+        <p>
+          <Highlighted text={m.text} spans={m.unclear_spans} />
+        </p>
         {!mine && (
           <div className="mt-1 flex gap-3 text-xs">
             {onPlay && (
@@ -40,6 +63,9 @@ function Bubble({ m, onPlay, loading }: { m: Message; onPlay?: (m: Message) => v
         )}
         {showTranslation && <p className="mt-1 text-sm italic opacity-70">{m.translation}</p>}
       </div>
+      {mine && !!m.unclear_spans?.length && (
+        <p className="max-w-[85%] text-xs opacity-60">Dotted words were hard to make out. Try saying them more clearly.</p>
+      )}
       {mine &&
         m.corrections?.map((c, i) => (
           <div

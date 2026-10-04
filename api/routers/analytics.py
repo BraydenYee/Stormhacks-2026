@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.config import settings
 from api.db import get_db
 from api.ml import difficulty as diff
 from api.ml.insights import cluster_mistakes
@@ -15,6 +16,16 @@ from api.services import llm
 
 log = logging.getLogger(__name__)
 router = APIRouter()
+
+
+@router.get("/users/{user_id}/level")
+async def current_level(user_id: uuid.UUID, lang: str, db: AsyncSession = Depends(get_db)):
+    """The learner's estimated level in a language. A new learner gets the level they would start at."""
+    profile = await db.scalar(
+        select(LearnerProfile).where(LearnerProfile.user_id == user_id, LearnerProfile.target_lang == lang)
+    )
+    value = profile.difficulty if profile else diff.new_learner_difficulty(settings.default_level)
+    return {"exists": profile is not None, "value": value, "cefr": diff.cefr_label(value)}
 
 
 @router.get("/users/{user_id}/analytics")
@@ -78,15 +89,23 @@ async def analytics(user_id: uuid.UUID, lang: str | None = None, db: AsyncSessio
     for c, label in zip(clusters, labels):
         c["label"] = label
 
-    turn_count = len(
-        (
-            await db.scalars(
-                select(Turn.id)
-                .join(ConversationSession, ConversationSession.id == Turn.session_id)
-                .where(ConversationSession.user_id == user_id, ConversationSession.target_lang == lang, Turn.role == "user")
-            )
-        ).all()
-    )
+    learner_turns = (
+        await db.execute(
+            select(Turn.session_id, Turn.features)
+            .join(ConversationSession, ConversationSession.id == Turn.session_id)
+            .where(ConversationSession.user_id == user_id, ConversationSession.target_lang == lang, Turn.role == "user")
+        )
+    ).all()
+    turn_count = len(learner_turns)
+
+    # Pronunciation clarity per session: the mean over spoken turns (typed turns have none).
+    clarity: dict[uuid.UUID, list[float]] = {}
+    unclear: Counter = Counter()
+    for sid, f in learner_turns:
+        f = f or {}
+        if f.get("clarity") is not None:
+            clarity.setdefault(sid, []).append(f["clarity"])
+        unclear[sid] += f.get("unclear_count", 0)
 
     return {
         "lang": lang,
@@ -100,6 +119,8 @@ async def analytics(user_id: uuid.UUID, lang: str | None = None, db: AsyncSessio
                 "difficulty_start": s.start_difficulty,
                 "difficulty_end": s.end_difficulty if s.end_difficulty is not None else profile.difficulty,
                 "errors": dict(per_session.get(s.id, {})),
+                "clarity": round(sum(clarity[s.id]) / len(clarity[s.id]), 3) if s.id in clarity else None,
+                "unclear_words": unclear[s.id],
                 "ended": s.ended_at is not None,
             }
             for s in sessions

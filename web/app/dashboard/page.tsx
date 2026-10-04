@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ChartCard, DifficultyLine, ErrorStack } from "@/components/Charts";
+import { ChartCard, ErrorStack, TrendLine } from "@/components/Charts";
 import { api, getUserId, LANGUAGES, type Analytics } from "@/lib/api";
 
 type Full = Extract<Analytics, { empty: false }>;
+
+const CEFR = ["A1", "A2", "B1", "B2", "C1", "C2"];
+const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 // Fixed entity → slot mapping so a category keeps its color regardless of what else is present.
 const ERROR_KEYS = [
@@ -79,7 +82,15 @@ export default function Dashboard() {
             rows: sessions.map((s) => [s.label, s.day, s.difficulty_start.toFixed(2), s.difficulty_end.toFixed(2)]),
           }}
         >
-          <DifficultyLine points={sessions.map((s) => ({ label: s.label, value: s.difficulty_end, detail: s.day }))} />
+          <TrendLine
+            points={sessions.map((s) => ({ label: s.label, value: s.difficulty_end, detail: s.day }))}
+            min={1}
+            max={6}
+            ticks={CEFR.map((label, i) => ({ value: i + 1, label }))}
+            seriesLabel="difficulty"
+            format={(v) => `${CEFR[Math.round(v) - 1]} (${v.toFixed(1)})`}
+            ariaLabel="Difficulty level by session"
+          />
         </ChartCard>
 
         <ChartCard
@@ -99,6 +110,28 @@ export default function Dashboard() {
             data={sessions.map((s) => ({ label: s.label, detail: s.day, segments: foldErrors(s.errors) }))}
           />
         </ChartCard>
+
+        <div className="lg:col-span-2">
+          <ChartCard
+            title="Pronunciation clarity"
+            subtitle="How easily the speech recognizer understood your words, averaged over spoken turns. Typed turns aren't counted."
+            table={{
+              head: ["Session", "Date", "Clarity", "Unclear words"],
+              rows: sessions.map((s) => [s.label, s.day, s.clarity == null ? "–" : pct(s.clarity), s.unclear_words]),
+            }}
+          >
+            <TrendLine
+              points={sessions.map((s) => ({ label: s.label, value: s.clarity, detail: s.day }))}
+              min={0}
+              max={1}
+              ticks={[0, 0.25, 0.5, 0.75, 1].map((v) => ({ value: v, label: pct(v) }))}
+              seriesLabel="clarity"
+              format={pct}
+              ariaLabel="Pronunciation clarity by session"
+              color="var(--series-3)"
+            />
+          </ChartCard>
+        </div>
       </div>
 
       <section>

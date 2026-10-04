@@ -11,6 +11,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const { id } = use(params);
   const [messages, setMessages] = useState<Message[]>([]);
   const [language, setLanguage] = useState("");
+  const [langCode, setLangCode] = useState<string | undefined>(undefined);
   const [difficulty, setDifficulty] = useState(2);
   const [cefr, setCefr] = useState("A2");
   const [pending, setPending] = useState(false);
@@ -35,6 +36,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         const s = await api.getSession(id);
         if (cancelled) return;
         setLanguage(LANGUAGES[s.target_lang] ?? s.target_lang);
+        setLangCode(s.target_lang);
         setDifficulty(s.difficulty.value);
         setCefr(s.difficulty.cefr);
         setMessages(s.turns.map((t) => ({ ...t })));
@@ -56,7 +58,13 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   function applyTurn(userText: string, r: TurnResult) {
     setMessages((prev) => [
       ...prev.filter((m) => m.id !== "pending-user"),
-      { id: r.user_turn.id, role: "user", text: r.user_turn.text || userText, corrections: r.user_turn.corrections },
+      {
+        id: r.user_turn.id,
+        role: "user",
+        text: r.user_turn.text || userText,
+        corrections: r.user_turn.corrections,
+        unclear_spans: r.user_turn.features.unclear_spans,
+      },
       {
         id: r.assistant_turn.id,
         role: "assistant",
@@ -75,7 +83,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       let audio = m.audio;
       if (!audio) {
         setLoadingAudio(m.id);
-        const r = await api.speak(m.text);
+        const r = await api.speak(m.text, langCode);
         audio = { b64: r.audio_b64, mime: r.audio_mime };
         const cached = audio;
         setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, audio: cached } : x)));
@@ -188,11 +196,12 @@ function SummaryView({ summary: s }: { summary: Summary }) {
         {s.coach_note && <p className="mt-2 opacity-80">{s.coach_note}</p>}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat label="Turns" value={s.turns} />
         <Stat label="Words spoken" value={s.words_spoken} />
         <Stat label="Level" value={s.cefr_end} />
         <Stat label="Avg score" value={s.avg_performance != null ? `${Math.round(s.avg_performance * 100)}%` : "–"} />
+        {s.avg_clarity != null && <Stat label="Clarity" value={`${Math.round(s.avg_clarity * 100)}%`} />}
       </div>
 
       {errors.length > 0 && (

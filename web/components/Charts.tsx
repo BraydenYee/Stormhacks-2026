@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-const CEFR = ["A1", "A2", "B1", "B2", "C1", "C2"];
 const H = 240;
 const PAD = { l: 34, r: 16, t: 12, b: 28 };
 
@@ -123,17 +122,45 @@ function Tooltip({ tip, width }: { tip: Tip | null; width: number }) {
   );
 }
 
-/* ---------- Difficulty line (single series, y axis in CEFR levels) ---------- */
+/* ---------- Trend line: one series across sessions (a session may have no value) ---------- */
 
-export function DifficultyLine({ points }: { points: { label: string; value: number; detail: string }[] }) {
+export type TrendPoint = { label: string; value: number | null; detail: string };
+
+export function TrendLine({
+  points,
+  min,
+  max,
+  ticks,
+  seriesLabel,
+  format,
+  ariaLabel,
+  color = "var(--series-1)",
+}: {
+  points: TrendPoint[];
+  min: number;
+  max: number;
+  ticks: { value: number; label: string }[];
+  seriesLabel: string;
+  format: (v: number) => string;
+  ariaLabel: string;
+  color?: string;
+}) {
   const [ref, w] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const iw = w - PAD.l - PAD.r;
   const ih = H - PAD.t - PAD.b;
   const x = (i: number) => PAD.l + (points.length === 1 ? iw / 2 : (i / (points.length - 1)) * iw);
-  const y = (v: number) => PAD.t + ih - ((v - 1) / 5) * ih;
-  const line = points.map((p, i) => `${i ? "L" : "M"}${x(i)},${y(p.value)}`).join(" ");
-  const area = `${line} L${x(points.length - 1)},${y(1)} L${x(0)},${y(1)} Z`;
+  const y = (v: number) => PAD.t + ih - ((v - min) / (max - min)) * ih;
+  // Runs of consecutive sessions that have a value. A session without one breaks the line.
+  const runs: number[][] = [];
+  points.forEach((p, i) => {
+    if (p.value == null) return;
+    const last = runs[runs.length - 1];
+    if (last && last[last.length - 1] === i - 1) last.push(i);
+    else runs.push([i]);
+  });
+  const linePath = (run: number[]) => run.map((i, k) => `${k ? "L" : "M"}${x(i)},${y(points[i].value!)}`).join(" ");
+  const areaPath = (run: number[]) => `${linePath(run)} L${x(run[run.length - 1])},${y(min)} L${x(run[0])},${y(min)} Z`;
   const step = Math.ceil(points.length / 6);
 
   const at = (clientX: number) => {
@@ -143,30 +170,29 @@ export function DifficultyLine({ points }: { points: { label: string; value: num
     setHover(Math.max(0, Math.min(points.length - 1, i)));
   };
 
+  const hovered = hover == null ? null : points[hover];
   const tip: Tip | null =
-    hover == null
+    hover == null || hovered == null
       ? null
       : {
           x: x(hover),
-          y: y(points[hover].value),
-          title: `${points[hover].label} · ${points[hover].detail}`,
+          y: y(hovered.value ?? min),
+          title: `${hovered.label} · ${hovered.detail}`,
           rows: [
-            {
-              label: "difficulty",
-              value: `${CEFR[Math.round(points[hover].value) - 1]} (${points[hover].value.toFixed(1)})`,
-              color: "var(--series-1)",
-            },
+            hovered.value == null
+              ? { label: "no spoken turns", value: "–", color: "var(--axis)" }
+              : { label: seriesLabel, value: format(hovered.value), color },
           ],
         };
 
   return (
     <div ref={ref} className="relative" onPointerMove={(e) => at(e.clientX)} onPointerLeave={() => setHover(null)}>
-      <svg width={w} height={H} role="img" aria-label="Difficulty level by session">
-        {CEFR.map((l, i) => (
-          <g key={l}>
-            <line x1={PAD.l} x2={w - PAD.r} y1={y(i + 1)} y2={y(i + 1)} stroke={i === 0 ? "var(--axis)" : "var(--grid)"} strokeWidth={1} />
-            <text x={PAD.l - 8} y={y(i + 1) + 4} textAnchor="end" fontSize={11} fill="var(--ink-muted)">
-              {l}
+      <svg width={w} height={H} role="img" aria-label={ariaLabel}>
+        {ticks.map((t) => (
+          <g key={t.label}>
+            <line x1={PAD.l} x2={w - PAD.r} y1={y(t.value)} y2={y(t.value)} stroke={t.value === min ? "var(--axis)" : "var(--grid)"} strokeWidth={1} />
+            <text x={PAD.l - 8} y={y(t.value) + 4} textAnchor="end" fontSize={11} fill="var(--ink-muted)">
+              {t.label}
             </text>
           </g>
         ))}
@@ -177,12 +203,20 @@ export function DifficultyLine({ points }: { points: { label: string; value: num
             </text>
           ) : null,
         )}
-        {points.length > 1 && <path d={area} fill="var(--series-1)" opacity={0.1} />}
-        {points.length > 1 && <path d={line} fill="none" stroke="var(--series-1)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
+        {runs
+          .filter((run) => run.length > 1)
+          .map((run) => (
+            <g key={run[0]}>
+              <path d={areaPath(run)} fill={color} opacity={0.1} />
+              <path d={linePath(run)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            </g>
+          ))}
         {hover != null && <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={PAD.t + ih} stroke="var(--axis)" strokeWidth={1} />}
-        {points.map((p, i) => (
-          <circle key={i} cx={x(i)} cy={y(p.value)} r={hover === i ? 5 : 4} fill="var(--series-1)" stroke="var(--chart-surface)" strokeWidth={2} />
-        ))}
+        {points.map((p, i) =>
+          p.value == null ? null : (
+            <circle key={i} cx={x(i)} cy={y(p.value)} r={hover === i ? 5 : 4} fill={color} stroke="var(--chart-surface)" strokeWidth={2} />
+          ),
+        )}
       </svg>
       <Tooltip tip={tip} width={w} />
     </div>
