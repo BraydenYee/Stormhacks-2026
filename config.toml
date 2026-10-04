@@ -1,7 +1,7 @@
 # Settings for gemini_chat.py. Command-line flags override these.
 
 # Language Gemini responds in, e.g. "English", "Spanish", "Japanese".
-language = "Japanese"
+language = "French"
 
 # Your primary language. The CLI adds a translation of each reply in this language.
 native_language = "English"
